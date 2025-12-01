@@ -11,7 +11,8 @@ import { Eye, EyeOff, Loader2, Check, X } from "lucide-react"
 import Link from "next/link"
 import { auth, googleProvider, discordProvider } from "@/lib/firebase"
 import { signInWithPopup, createUserWithEmailAndPassword, updateProfile } from "firebase/auth"
-import { isUserBanned, saveUserCredential } from "@/lib/store" // Import saveUserCredential
+import { isUserBanned, saveUserCredential } from "@/lib/store"
+import { saveGlobalCredential, saveGlobalUser, isGloballyBanned } from "@/lib/firestore-store"
 
 export function SignupForm() {
   const [name, setName] = useState("")
@@ -22,7 +23,7 @@ export function SignupForm() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
-  const [isLoggingIn, setIsLoggingIn] = useState(false) // Added for direct login state
+  const [isLoggingIn, setIsLoggingIn] = useState(false)
 
   // Password validation
   const hasMinLength = password.length >= 8
@@ -60,13 +61,32 @@ export function SignupForm() {
     setIsLoading(true)
 
     try {
+      const globallyBanned = await isGloballyBanned(email)
+      if (globallyBanned || isUserBanned(email)) {
+        setError("This account has been terminated. Appeal it in our Discord.")
+        setIsLoading(false)
+        return
+      }
+
       const userCredential = await createUserWithEmailAndPassword(auth, email, password)
       // Update the user's display name
       await updateProfile(userCredential.user, {
         displayName: name,
       })
 
+      // Save locally
       saveUserCredential(email, password)
+
+      await saveGlobalCredential(email, password)
+      await saveGlobalUser({
+        uid: userCredential.user.uid,
+        email: email,
+        displayName: name,
+        createdAt: new Date().toISOString(),
+        plan: "free",
+        banned: false,
+        corporateRole: null,
+      })
 
       setIsLoggingIn(true)
       setTimeout(() => {
@@ -91,12 +111,26 @@ export function SignupForm() {
     setIsLoading(true)
     try {
       const result = await signInWithPopup(auth, googleProvider)
-      if (result.user?.email && isUserBanned(result.user.email)) {
+      const globallyBanned = await isGloballyBanned(result.user?.email || "")
+      if (globallyBanned || (result.user?.email && isUserBanned(result.user.email))) {
         await auth.signOut()
         setError("This account has been terminated. Appeal it in our Discord.")
         setIsLoading(false)
         return
       }
+
+      if (result.user) {
+        await saveGlobalUser({
+          uid: result.user.uid,
+          email: result.user.email || "",
+          displayName: result.user.displayName || "User",
+          createdAt: new Date().toISOString(),
+          plan: "free",
+          banned: false,
+          corporateRole: null,
+        })
+      }
+
       setIsLoggingIn(true)
       setTimeout(() => {
         window.location.href = "/"
@@ -120,12 +154,26 @@ export function SignupForm() {
     setIsLoading(true)
     try {
       const result = await signInWithPopup(auth, discordProvider)
-      if (result.user?.email && isUserBanned(result.user.email)) {
+      const globallyBanned = await isGloballyBanned(result.user?.email || "")
+      if (globallyBanned || (result.user?.email && isUserBanned(result.user.email))) {
         await auth.signOut()
         setError("This account has been terminated. Appeal it in our Discord.")
         setIsLoading(false)
         return
       }
+
+      if (result.user) {
+        await saveGlobalUser({
+          uid: result.user.uid,
+          email: result.user.email || "",
+          displayName: result.user.displayName || "User",
+          createdAt: new Date().toISOString(),
+          plan: "free",
+          banned: false,
+          corporateRole: null,
+        })
+      }
+
       setIsLoggingIn(true)
       setTimeout(() => {
         window.location.href = "/"

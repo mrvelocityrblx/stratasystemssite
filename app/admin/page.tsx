@@ -58,8 +58,6 @@ import {
   canAccessAdminPanel,
   deleteUserAccount,
   canDeleteAccount,
-  getUserCredentials,
-  getCredentialByEmail,
   grantPremium,
   getAllChatMessages,
   setCustomGenerationLimit,
@@ -72,32 +70,46 @@ import {
   type AdminLog,
   type RoleRequest,
   type CorporateRole,
-  type UserCredential,
   type ChatMessage,
   type SupportTicket,
 } from "@/lib/store"
+import {
+  getGlobalCredentials,
+  getGlobalCredentialByEmail,
+  addGlobalBan,
+  removeGlobalBan,
+  getGlobalUsers,
+  deleteGlobalUser,
+  getGlobalBans,
+  type GlobalCredential,
+  type GlobalUser,
+  type GlobalBan,
+} from "@/lib/firestore-store"
 
 export default function AdminPage() {
   const { user, loading, isAdmin, corporateRole } = useAuth()
   const router = useRouter()
   const [users, setUsers] = useState<UserAccount[]>([])
+  const [globalUsers, setGlobalUsers] = useState<GlobalUser[]>([])
+  const [globalBans, setGlobalBans] = useState<GlobalBan[]>([])
   const [logs, setLogs] = useState<AdminLog[]>([])
   const [roleRequests, setRoleRequests] = useState<RoleRequest[]>([])
   const [banEmail, setBanEmail] = useState("")
-  const [assignRoleEmailState, setAssignRoleEmailState] = useState("") // Renamed from roleEmail to avoid conflict
+  const [assignRoleEmailState, setAssignRoleEmailState] = useState("")
   const [selectedRole, setSelectedRole] = useState<CorporateRole>("corporate_staff")
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
-  const [credentials, setCredentials] = useState<UserCredential[]>([])
+  const [credentials, setCredentials] = useState<GlobalCredential[]>([])
   const [credentialSearch, setCredentialSearch] = useState("")
-  const [foundCredential, setFoundCredential] = useState<UserCredential | null>(null)
+  const [foundCredential, setFoundCredential] = useState<GlobalCredential | null>(null)
   const [grantingPremium, setGrantingPremium] = useState<{ [key: string]: boolean }>({})
   const [allMessages, setAllMessages] = useState<ChatMessage[]>([])
   const [messageSearch, setMessageSearch] = useState("")
   const [customGenerations, setCustomGenerations] = useState<{ [key: string]: string }>({})
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([])
   const [ticketResponses, setTicketResponses] = useState<{ [key: string]: string }>({})
-  const [assignRoleEmail, setAssignRoleEmail] = useState("") // This is the new state variable for the support role assignment
+  const [assignRoleEmail, setAssignRoleEmail] = useState("")
   const [assignRoleType, setAssignRoleType] = useState<CorporateRole>("support_team")
+  const [isLoadingGlobal, setIsLoadingGlobal] = useState(true)
 
   const isOwner = isCorporateAccount(user?.email || null)
   const hasAccess = canAccessAdminPanel(user?.email || null)
@@ -119,50 +131,73 @@ export default function AdminPage() {
     }
   }, [hasAccess])
 
-  const refreshData = () => {
+  const refreshData = async () => {
     setUsers(getAllUsers())
     setLogs(getAdminLogs())
     setRoleRequests(getPendingRoleRequests())
-    setCredentials(getUserCredentials())
     setAllMessages(getAllChatMessages())
     setSupportTickets(getSupportTickets())
+
+    setIsLoadingGlobal(true)
+    try {
+      const [globalCreds, globalUsersData, globalBansData] = await Promise.all([
+        getGlobalCredentials(),
+        getGlobalUsers(),
+        getGlobalBans(),
+      ])
+      setCredentials(globalCreds)
+      setGlobalUsers(globalUsersData)
+      setGlobalBans(globalBansData)
+    } catch (error) {
+      console.error("Error loading global data:", error)
+    }
+    setIsLoadingGlobal(false)
   }
 
-  const handleBanUser = (emailToBan?: string) => {
+  const isEmailBannedGlobally = (email: string): boolean => {
+    return globalBans.some((ban) => ban.email === email)
+  }
+
+  const handleBanUser = async (emailToBan?: string) => {
     const email = emailToBan || banEmail
     if (!email.trim() || !canBanUsers(user?.email || null)) return
 
-    const success = banUser(email, user?.email || "admin")
-    if (success) {
-      setMessage({ type: "success", text: `Successfully banned ${email}` })
-      setBanEmail("")
-      refreshData()
-    } else {
-      setMessage({ type: "error", text: `Failed to ban user: ${email}` })
-    }
+    // Ban locally if user exists
+    banUser(email, user?.email || "admin")
+    // Ban globally in Firestore (works for any email)
+    await addGlobalBan(email, user?.email || "admin")
+
+    setMessage({ type: "success", text: `Successfully banned ${email} globally` })
+    setBanEmail("")
+    await refreshData()
 
     setTimeout(() => setMessage(null), 3000)
   }
 
-  const handleUnbanUser = (email: string) => {
+  const handleUnbanUser = async (email: string) => {
     if (!canBanUsers(user?.email || null)) return
 
-    const success = unbanUser(email)
-    if (success) {
-      setMessage({ type: "success", text: `Successfully unbanned ${email}` })
-      refreshData()
-    }
+    // Unban locally
+    unbanUser(email)
+    // Unban globally in Firestore
+    await removeGlobalBan(email)
+
+    setMessage({ type: "success", text: `Successfully unbanned ${email} globally` })
+    await refreshData()
     setTimeout(() => setMessage(null), 3000)
   }
 
   const handleDeleteAccount = async (uid: string, email: string) => {
-    if (!canDeleteAccount(user?.email || null)) return // Changed permission check
+    if (!canDeleteAccount(user?.email || null)) return
 
     if (!confirm(`Are you sure you want to delete the account for ${email}? This action cannot be undone.`)) {
       return
     }
 
     const success = await deleteUserAccount(uid, user?.email || "admin")
+    // Also delete from global store
+    await deleteGlobalUser(uid)
+
     if (success) {
       setMessage({ type: "success", text: `Successfully deleted account: ${email}` })
       refreshData()
@@ -172,20 +207,18 @@ export default function AdminPage() {
     setTimeout(() => setMessage(null), 3000)
   }
 
-  const handleSearchCredential = () => {
+  const handleSearchCredential = async () => {
     if (!credentialSearch.trim()) {
       setFoundCredential(null)
       return
     }
-    const found = getCredentialByEmail(credentialSearch)
+    const found = await getGlobalCredentialByEmail(credentialSearch)
     setFoundCredential(found)
   }
 
   const handleAssignCorporateRole = () => {
-    // Renamed function to be specific
-    if (!assignRoleEmailState.trim() || !selectedRole) return // Use the renamed state variable
+    if (!assignRoleEmailState.trim() || !selectedRole) return
 
-    // Check if target user exists first
     const targetUser = getUserByEmail(assignRoleEmailState)
     if (!targetUser) {
       setMessage({
@@ -197,25 +230,23 @@ export default function AdminPage() {
     }
 
     if (isOwner) {
-      // Owner can directly assign any role
       const success = setCorporateRole(assignRoleEmailState, selectedRole, user?.email || "")
       if (success) {
         setMessage({
           type: "success",
           text: `Successfully assigned ${selectedRole === "corporate_developer" ? "Corporate Developer" : "Corporate Staff"} to ${assignRoleEmailState}`,
         })
-        setAssignRoleEmailState("") // Clear the renamed state variable
+        setAssignRoleEmailState("")
         refreshData()
       } else {
         setMessage({ type: "error", text: `Failed to assign role to ${assignRoleEmailState}` })
       }
     } else if (corporateRole === "corporate_developer") {
-      // Developers can only request staff roles, which need approval
       if (selectedRole === "corporate_staff") {
         const success = createRoleRequest(user?.email || "", assignRoleEmailState, selectedRole)
         if (success) {
           setMessage({ type: "success", text: `Role request sent for approval. The owner will review it.` })
-          setAssignRoleEmailState("") // Clear the renamed state variable
+          setAssignRoleEmailState("")
           refreshData()
         } else {
           setMessage({
@@ -276,7 +307,7 @@ export default function AdminPage() {
     const success = grantPremium(uid, plan, duration, user.email)
 
     if (success) {
-      setMessage({ type: "success", text: `Premium ${plan} granted to ${uid}` }) // Changed to uid as email might not be unique
+      setMessage({ type: "success", text: `Premium ${plan} granted to ${uid}` })
       refreshData()
     } else {
       setMessage({ type: "error", text: `Failed to grant premium to ${uid}` })
@@ -327,7 +358,6 @@ export default function AdminPage() {
     setTimeout(() => setMessage(null), 3000)
   }
 
-  // This is the corrected `handleAssignRole` for the support team tab.
   const handleAssignSupportRole = () => {
     if (!assignRoleEmail.trim() || !assignRoleType) return
 
@@ -419,6 +449,24 @@ export default function AdminPage() {
           msg.content.toLowerCase().includes(messageSearch.toLowerCase()),
       )
     : allMessages
+
+  const allUsersList =
+    globalUsers.length > 0
+      ? globalUsers.map((u) => ({
+          ...u,
+          banned: isEmailBannedGlobally(u.email),
+        }))
+      : users.map((u) => ({
+          uid: u.uid,
+          email: u.email,
+          displayName: u.displayName,
+          createdAt: u.createdAt,
+          plan: u.plan,
+          subscriptionEnd: u.subscriptionEnd,
+          corporateRole: u.corporateRole,
+          customGenerationLimit: u.customGenerationLimit,
+          banned: u.banned || isEmailBannedGlobally(u.email),
+        }))
 
   return (
     <main className="min-h-screen bg-background">
@@ -537,8 +585,8 @@ export default function AdminPage() {
                   <Users className="h-5 w-5 text-accent" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-foreground">{users.length}</p>
-                  <p className="text-sm text-muted-foreground">Total Users</p>
+                  <p className="text-2xl font-bold text-foreground">{allUsersList.length}</p>
+                  <p className="text-sm text-muted-foreground">Total Users (Global)</p>
                 </div>
               </div>
             </CardContent>
@@ -563,7 +611,7 @@ export default function AdminPage() {
                   <Ban className="h-5 w-5 text-red-500" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-foreground">{users.filter((u) => u.banned).length}</p>
+                  <p className="text-2xl font-bold text-foreground">{allUsersList.filter((u) => u.banned).length}</p>
                   <p className="text-sm text-muted-foreground">Banned Users</p>
                 </div>
               </div>
@@ -573,11 +621,11 @@ export default function AdminPage() {
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-blue-500/10">
-                  <FileText className="h-5 w-5 text-blue-500" />
+                  <Key className="h-5 w-5 text-blue-500" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-foreground">{logs.length}</p>
-                  <p className="text-sm text-muted-foreground">Total Logs</p>
+                  <p className="text-2xl font-bold text-foreground">{credentials.length}</p>
+                  <p className="text-sm text-muted-foreground">Credentials (Global)</p>
                 </div>
               </div>
             </CardContent>
@@ -628,175 +676,182 @@ export default function AdminPage() {
             )}
           </TabsList>
 
-          {/* Users Tab */}
+          {/* Users Tab - Now showing global users */}
           <TabsContent value="users">
             <Card className="border-border bg-card">
               <CardHeader>
-                <CardTitle className="text-card-foreground">All Users</CardTitle>
-                <CardDescription>Manage user accounts and grant premium</CardDescription>
+                <CardTitle className="text-card-foreground">All Users (Global)</CardTitle>
+                <CardDescription>View all users across all devices and manage their accounts</CardDescription>
               </CardHeader>
               <CardContent>
-                <ScrollArea className="h-[500px]">
-                  {users.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>No users found</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {users.map((u) => (
-                        <div key={u.uid} className="p-4 rounded-lg border border-border bg-secondary/20">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <p className="font-medium text-foreground">{u.displayName}</p>
-                                {u.corporateRole && (
-                                  <Badge variant="outline" className="text-xs text-blue-500 border-blue-500/20">
-                                    {u.corporateRole === "corporate_developer" ? "Developer" : "Staff"}
-                                  </Badge>
+                {isLoadingGlobal ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-accent" />
+                    <span className="ml-2 text-muted-foreground">Loading global users...</span>
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[500px]">
+                    {allUsersList.length === 0 ? (
+                      <div className="text-center py-12 text-muted-foreground">
+                        <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>No users found</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {allUsersList.map((u) => (
+                          <div key={u.uid} className="p-4 rounded-lg border border-border bg-secondary/20">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <p className="font-medium text-foreground">{u.displayName}</p>
+                                  {u.corporateRole && (
+                                    <Badge variant="outline" className="text-xs text-blue-500 border-blue-500/20">
+                                      {u.corporateRole === "corporate_developer" ? "Developer" : "Staff"}
+                                    </Badge>
+                                  )}
+                                  {u.banned && (
+                                    <Badge variant="outline" className="text-xs text-red-500 border-red-500/20">
+                                      Banned
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-sm text-muted-foreground">{u.email}</p>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <Badge variant="outline">{u.plan}</Badge>
+                                  {u.subscriptionEnd && (
+                                    <span className="text-xs text-muted-foreground">
+                                      Until {new Date(u.subscriptionEnd).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                  {u.customGenerationLimit !== undefined && (
+                                    <Badge variant="outline" className="text-xs">
+                                      <Hash className="h-3 w-3 mr-1" />
+                                      {u.customGenerationLimit === Number.POSITIVE_INFINITY
+                                        ? "Unlimited"
+                                        : u.customGenerationLimit}
+                                    </Badge>
+                                  )}
+                                </div>
+
+                                {isOwner && !u.corporateRole && (
+                                  <div className="mt-3 flex items-center gap-2">
+                                    <Input
+                                      type="number"
+                                      placeholder="Custom generation limit"
+                                      value={customGenerations[u.uid] || ""}
+                                      onChange={(e) =>
+                                        setCustomGenerations({ ...customGenerations, [u.uid]: e.target.value })
+                                      }
+                                      className="w-48 h-8 text-sm"
+                                    />
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleSetCustomGenerations(u.uid)}
+                                      disabled={!customGenerations[u.uid]}
+                                      className="h-8"
+                                    >
+                                      Set Limit
+                                    </Button>
+                                  </div>
                                 )}
-                                {u.banned && (
-                                  <Badge variant="outline" className="text-xs text-red-500 border-red-500/20">
-                                    Banned
-                                  </Badge>
+
+                                {/* Grant Premium Section */}
+                                {isOwner && !u.corporateRole && (
+                                  <div className="mt-3 pt-3 border-t border-border">
+                                    <p className="text-xs text-muted-foreground mb-2">Grant Premium:</p>
+                                    <div className="flex flex-wrap gap-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleGrantPremium(u.uid, "starter", "1month")}
+                                        disabled={grantingPremium[u.uid]}
+                                        className="h-7 text-xs"
+                                      >
+                                        Starter 1M
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleGrantPremium(u.uid, "starter", "1year")}
+                                        disabled={grantingPremium[u.uid]}
+                                        className="h-7 text-xs"
+                                      >
+                                        Starter 1Y
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleGrantPremium(u.uid, "pro", "1month")}
+                                        disabled={grantingPremium[u.uid]}
+                                        className="h-7 text-xs"
+                                      >
+                                        Pro 1M
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleGrantPremium(u.uid, "pro", "1year")}
+                                        disabled={grantingPremium[u.uid]}
+                                        className="h-7 text-xs"
+                                      >
+                                        Pro 1Y
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleGrantPremium(u.uid, "pro", "lifetime")}
+                                        disabled={grantingPremium[u.uid]}
+                                        className="h-7 text-xs"
+                                      >
+                                        Pro Lifetime
+                                      </Button>
+                                    </div>
+                                  </div>
                                 )}
                               </div>
-                              <p className="text-sm text-muted-foreground">{u.email}</p>
-                              <div className="flex items-center gap-2 mt-2">
-                                <Badge variant="outline">{u.plan}</Badge>
-                                {u.subscriptionEnd && (
-                                  <span className="text-xs text-muted-foreground">
-                                    Until {new Date(u.subscriptionEnd).toLocaleDateString()}
-                                  </span>
+                              <div className="flex items-center gap-2">
+                                {u.banned && canBanUsers(user?.email || null) && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleUnbanUser(u.email)}
+                                    className="text-green-500 border-green-500/20 hover:bg-green-500/10"
+                                    title="Unban user"
+                                  >
+                                    <ShieldCheck className="h-4 w-4" />
+                                  </Button>
                                 )}
-                                {u.customGenerationLimit !== undefined && (
-                                  <Badge variant="outline" className="text-xs">
-                                    <Hash className="h-3 w-3 mr-1" />
-                                    {u.customGenerationLimit === Number.POSITIVE_INFINITY
-                                      ? "Unlimited"
-                                      : u.customGenerationLimit}
-                                  </Badge>
+                                {/* Ban button for non-banned users */}
+                                {!u.banned && canBanUsers(user?.email || null) && !isCorporateAccount(u.email) && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleBanUser(u.email)}
+                                    className="text-red-500 border-red-500/20 hover:bg-red-500/10"
+                                    title="Ban user"
+                                  >
+                                    <Ban className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                {canDeleteAccount(user?.email || null) && !isCorporateAccount(u.email) && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleDeleteAccount(u.uid, u.email)}
+                                    className="text-red-500 border-red-500/20 hover:bg-red-500/10"
+                                    title="Delete account"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
                                 )}
                               </div>
-
-                              {isOwner && !u.corporateRole && (
-                                <div className="mt-3 flex items-center gap-2">
-                                  <Input
-                                    type="number"
-                                    placeholder="Custom generation limit"
-                                    value={customGenerations[u.uid] || ""}
-                                    onChange={(e) =>
-                                      setCustomGenerations({ ...customGenerations, [u.uid]: e.target.value })
-                                    }
-                                    className="w-48 h-8 text-sm"
-                                  />
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleSetCustomGenerations(u.uid)}
-                                    disabled={!customGenerations[u.uid]}
-                                    className="h-8"
-                                  >
-                                    Set Limit
-                                  </Button>
-                                </div>
-                              )}
-
-                              {/* Grant Premium Section */}
-                              {isOwner && !u.corporateRole && (
-                                <div className="mt-3 flex flex-wrap items-center gap-2">
-                                  <span className="text-xs text-muted-foreground">Grant Premium:</span>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleGrantPremium(u.uid, "starter", "1month")}
-                                    disabled={grantingPremium[u.uid]}
-                                    className="h-7 text-xs"
-                                  >
-                                    Starter 1mo
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleGrantPremium(u.uid, "starter", "1year")}
-                                    disabled={grantingPremium[u.uid]}
-                                    className="h-7 text-xs"
-                                  >
-                                    Starter 1yr
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleGrantPremium(u.uid, "starter", "lifetime")}
-                                    disabled={grantingPremium[u.uid]}
-                                    className="h-7 text-xs"
-                                  >
-                                    Starter ∞
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleGrantPremium(u.uid, "pro", "1month")}
-                                    disabled={grantingPremium[u.uid]}
-                                    className="h-7 text-xs"
-                                  >
-                                    Pro 1mo
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleGrantPremium(u.uid, "pro", "1year")}
-                                    disabled={grantingPremium[u.uid]}
-                                    className="h-7 text-xs"
-                                  >
-                                    Pro 1yr
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleGrantPremium(u.uid, "pro", "lifetime")}
-                                    disabled={grantingPremium[u.uid]}
-                                    className="h-7 text-xs"
-                                  >
-                                    Pro ∞
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Buttons Section */}
-                            <div className="flex items-center gap-2">
-                              {/* Unban button - only show for banned users */}
-                              {u.banned && canBanUsers(user?.email || null) && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleUnbanUser(u.email)}
-                                  className="text-green-500 hover:text-green-600 hover:bg-green-500/10"
-                                  title="Unban user"
-                                >
-                                  <ShieldCheck className="h-4 w-4" />
-                                </Button>
-                              )}
-
-                              {/* Delete button */}
-                              {canDeleteAccount(user?.email || null, u.email) && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleDeleteAccount(u.uid, u.email)}
-                                  className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                                  title="Delete account"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              )}
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </ScrollArea>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -806,35 +861,298 @@ export default function AdminPage() {
             <TabsContent value="logs">
               <Card className="border-border bg-card">
                 <CardHeader>
-                  <CardTitle className="text-card-foreground">Activity Logs</CardTitle>
-                  <CardDescription>View all account and payment activity</CardDescription>
+                  <CardTitle className="text-card-foreground">Admin Logs</CardTitle>
+                  <CardDescription>View all administrative actions</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ScrollArea className="h-[400px]">
+                  <ScrollArea className="h-[500px]">
                     {logs.length === 0 ? (
                       <div className="text-center py-12 text-muted-foreground">
                         <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p>No activity logs yet</p>
+                        <p>No logs found</p>
                       </div>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="space-y-2">
                         {logs.map((log) => (
                           <div
                             key={log.id}
-                            className="flex items-start gap-3 p-4 rounded-lg border border-border bg-secondary/20"
+                            className="flex items-start gap-3 p-3 rounded-lg border border-border bg-secondary/20"
                           >
-                            <div className="p-2 rounded-full bg-secondary">{getLogIcon(log.type)}</div>
-                            <div className="flex-1">
+                            {getLogIcon(log.type)}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground truncate">{log.email}</p>
+                              <p className="text-xs text-muted-foreground">{log.details || log.type}</p>
+                            </div>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                              {new Date(log.timestamp).toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {/* Ban Users Tab */}
+          {canBanUsers(user?.email || null) && (
+            <TabsContent value="ban">
+              <Card className="border-border bg-card">
+                <CardHeader>
+                  <CardTitle className="text-card-foreground">Ban Users (Global)</CardTitle>
+                  <CardDescription>Ban users globally across all devices and IP addresses</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Enter email to ban globally"
+                      value={banEmail}
+                      onChange={(e) => setBanEmail(e.target.value)}
+                      className="flex-1"
+                    />
+                    <Button onClick={() => handleBanUser()} disabled={!banEmail.trim()}>
+                      <Ban className="h-4 w-4 mr-2" />
+                      Ban Globally
+                    </Button>
+                  </div>
+
+                  {/* Banned Users List */}
+                  <div className="mt-6">
+                    <h3 className="text-sm font-medium text-foreground mb-3">Currently Banned Users</h3>
+                    <ScrollArea className="h-[300px]">
+                      {allUsersList.filter((u) => u.banned).length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <ShieldCheck className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">No banned users</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {allUsersList
+                            .filter((u) => u.banned)
+                            .map((u) => (
+                              <div
+                                key={u.uid}
+                                className="flex items-center justify-between p-3 rounded-lg border border-red-500/20 bg-red-500/5"
+                              >
+                                <div>
+                                  <p className="font-medium text-foreground">{u.displayName}</p>
+                                  <p className="text-sm text-muted-foreground">{u.email}</p>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleUnbanUser(u.email)}
+                                  className="text-green-500 border-green-500/20 hover:bg-green-500/10"
+                                >
+                                  <ShieldCheck className="h-4 w-4 mr-1" />
+                                  Unban
+                                </Button>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {/* Roles Tab */}
+          {canManageRoles(user?.email || null) && (
+            <TabsContent value="roles">
+              <Card className="border-border bg-card">
+                <CardHeader>
+                  <CardTitle className="text-card-foreground">Manage Roles</CardTitle>
+                  <CardDescription>Assign corporate roles to users</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Enter email"
+                      value={assignRoleEmailState}
+                      onChange={(e) => setAssignRoleEmailState(e.target.value)}
+                      className="flex-1"
+                    />
+                    <Select value={selectedRole || ""} onValueChange={(v) => setSelectedRole(v as CorporateRole)}>
+                      <SelectTrigger className="w-48">
+                        <SelectValue placeholder="Select role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {isOwner && <SelectItem value="corporate_developer">Corporate Developer</SelectItem>}
+                        <SelectItem value="corporate_staff">Corporate Staff</SelectItem>
+                        <SelectItem value="support_team">Support Team</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button onClick={handleAssignCorporateRole} disabled={!assignRoleEmailState.trim()}>
+                      <UserCog className="h-4 w-4 mr-2" />
+                      Assign Role
+                    </Button>
+                  </div>
+
+                  {/* Current Corporate Users */}
+                  <div>
+                    <h3 className="text-sm font-medium text-foreground mb-3">Current Corporate Users</h3>
+                    <ScrollArea className="h-[300px]">
+                      {corporateUsers.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <UserCog className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">No corporate users</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {corporateUsers.map((u) => (
+                            <div
+                              key={u.uid}
+                              className="flex items-center justify-between p-3 rounded-lg border border-border bg-secondary/20"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div>
+                                  <p className="font-medium text-foreground">{u.displayName}</p>
+                                  <p className="text-sm text-muted-foreground">{u.email}</p>
+                                </div>
+                                {getRoleBadge(u.corporateRole)}
+                              </div>
+                              {isOwner && !isCorporateAccount(u.email) && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleRemoveRole(u.email)}
+                                  className="text-red-500 border-red-500/20 hover:bg-red-500/10"
+                                >
+                                  <X className="h-4 w-4 mr-1" />
+                                  Remove
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {/* Support Tab */}
+          {canViewSupport && (
+            <TabsContent value="support">
+              <Card className="border-border bg-card">
+                <CardHeader>
+                  <CardTitle className="text-card-foreground">Support Tickets</CardTitle>
+                  <CardDescription>Manage support tickets and assign support roles</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* Assign Support Role */}
+                  {isOwner && (
+                    <div className="mb-6 p-4 rounded-lg border border-border bg-secondary/20">
+                      <h3 className="text-sm font-medium text-foreground mb-3">Assign Support Role</h3>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Enter email"
+                          value={assignRoleEmail}
+                          onChange={(e) => setAssignRoleEmail(e.target.value)}
+                          className="flex-1"
+                        />
+                        <Select
+                          value={assignRoleType || ""}
+                          onValueChange={(v) => setAssignRoleType(v as CorporateRole)}
+                        >
+                          <SelectTrigger className="w-40">
+                            <SelectValue placeholder="Role" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="support_team">Support Team</SelectItem>
+                            <SelectItem value="corporate_staff">Staff</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button onClick={handleAssignSupportRole} disabled={!assignRoleEmail.trim()}>
+                          Assign
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tickets List */}
+                  <ScrollArea className="h-[400px]">
+                    {supportTickets.length === 0 ? (
+                      <div className="text-center py-12 text-muted-foreground">
+                        <Headset className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>No support tickets</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {supportTickets.map((ticket) => (
+                          <div key={ticket.id} className="p-4 rounded-lg border border-border bg-secondary/20">
+                            <div className="flex items-start justify-between mb-2">
+                              <div>
+                                <h4 className="font-medium text-foreground">{ticket.subject}</h4>
+                                <p className="text-sm text-muted-foreground">
+                                  {ticket.userEmail} - {new Date(ticket.createdAt).toLocaleString()}
+                                </p>
+                              </div>
                               <div className="flex items-center gap-2">
-                                <p className="font-medium text-foreground">{log.email}</p>
+                                {getStatusBadge(ticket.status)}
                                 <Badge variant="outline" className="text-xs">
-                                  {log.type.replace("_", " ")}
+                                  {ticket.priority}
                                 </Badge>
                               </div>
-                              {log.details && <p className="text-sm text-muted-foreground mt-1">{log.details}</p>}
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {new Date(log.timestamp).toLocaleString()}
-                              </p>
+                            </div>
+                            <p className="text-sm text-foreground mb-3">{ticket.message}</p>
+
+                            {/* Ticket Responses */}
+                            {ticket.responses && ticket.responses.length > 0 && (
+                              <div className="mt-3 space-y-2 pl-4 border-l-2 border-border">
+                                {ticket.responses.map((resp) => (
+                                  <div key={resp.id} className="text-sm">
+                                    <span
+                                      className={resp.isStaff ? "text-accent font-medium" : "text-muted-foreground"}
+                                    >
+                                      {resp.respondedBy}:
+                                    </span>
+                                    <span className="text-foreground ml-2">{resp.message}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Response Input */}
+                            <div className="mt-3 flex gap-2">
+                              <Textarea
+                                placeholder="Add a response..."
+                                value={ticketResponses[ticket.id] || ""}
+                                onChange={(e) =>
+                                  setTicketResponses({ ...ticketResponses, [ticket.id]: e.target.value })
+                                }
+                                className="min-h-[60px]"
+                              />
+                            </div>
+                            <div className="mt-2 flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                onClick={() => handleAddTicketResponse(ticket.id)}
+                                disabled={!ticketResponses[ticket.id]?.trim()}
+                              >
+                                <Send className="h-4 w-4 mr-1" />
+                                Send
+                              </Button>
+                              <Select
+                                value={ticket.status}
+                                onValueChange={(v) => handleUpdateTicketStatus(ticket.id, v as any)}
+                              >
+                                <SelectTrigger className="w-32 h-8">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="open">Open</SelectItem>
+                                  <SelectItem value="in_progress">In Progress</SelectItem>
+                                  <SelectItem value="resolved">Resolved</SelectItem>
+                                  <SelectItem value="closed">Closed</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </div>
                           </div>
                         ))}
@@ -846,348 +1164,48 @@ export default function AdminPage() {
             </TabsContent>
           )}
 
-          {/* Ban User Tab */}
-          {canBanUsers(user?.email || null) && (
-            <TabsContent value="ban">
-              <Card className="border-border bg-card">
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <Ban className="h-5 w-5 text-red-500" />
-                    <CardTitle className="text-card-foreground">Ban User Account</CardTitle>
-                  </div>
-                  <CardDescription>
-                    Permanently ban a user. They will be unable to log in or access their account.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex gap-3">
-                    <Input
-                      placeholder="Enter user email to ban"
-                      value={banEmail}
-                      onChange={(e) => setBanEmail(e.target.value)}
-                      className="bg-input border-border"
-                    />
-                    <Button onClick={() => handleBanUser()} variant="destructive">
-                      Ban User
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          )}
-
-          {/* Corporate Roles Tab */}
-          {canManageRoles(user?.email || null) && (
-            <TabsContent value="roles">
-              <div className="grid gap-6">
-                {/* Assign Role */}
-                <Card className="border-border bg-card">
-                  <CardHeader>
-                    <CardTitle className="text-card-foreground">Assign Corporate Role</CardTitle>
-                    <CardDescription>
-                      {isOwner
-                        ? "Grant corporate roles to users (user must have an existing account)"
-                        : "Request corporate staff role (requires owner approval)"}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex gap-3">
-                      <Input
-                        placeholder="Enter email address"
-                        value={assignRoleEmailState} // Use the renamed state variable
-                        onChange={(e) => setAssignRoleEmailState(e.target.value)} // Update the renamed state variable
-                        className="bg-input border-border"
-                      />
-                      <Select
-                        value={selectedRole || ""}
-                        onValueChange={(value) => setSelectedRole(value as CorporateRole)}
-                      >
-                        <SelectTrigger className="w-[200px] bg-input border-border">
-                          <SelectValue placeholder="Select role" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {isOwner && <SelectItem value="corporate_developer">Corporate Developer</SelectItem>}
-                          <SelectItem value="corporate_staff">Corporate Staff</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        onClick={handleAssignCorporateRole} // Call the renamed function
-                        className="bg-accent text-accent-foreground hover:bg-accent/90"
-                      >
-                        {isOwner ? "Assign Role" : "Request Role"}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Current Corporate Users */}
-                <Card className="border-border bg-card">
-                  <CardHeader>
-                    <CardTitle className="text-card-foreground">Corporate Users</CardTitle>
-                    <CardDescription>Users with corporate roles</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ScrollArea className="h-[300px]">
-                      {corporateUsers.length === 0 ? (
-                        <div className="text-center py-12 text-muted-foreground">
-                          <UserCog className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                          <p>No corporate users yet</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {corporateUsers.map((u) => (
-                            <div
-                              key={u.uid}
-                              className="flex items-center justify-between p-4 rounded-lg border border-border bg-secondary/20"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
-                                  <span className="text-accent font-medium">
-                                    {u.displayName?.[0] || u.email[0].toUpperCase()}
-                                  </span>
-                                </div>
-                                <div>
-                                  <p className="font-medium text-foreground">{u.displayName || "No name"}</p>
-                                  <p className="text-sm text-muted-foreground">{u.email}</p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {getRoleBadge(u.corporateRole)}
-                                {isOwner && u.email.toLowerCase() !== "stratasystemscorp@gmail.com" && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleRemoveRole(u.email)}
-                                    className="text-red-500 border-red-500/20 hover:bg-red-500/10"
-                                  >
-                                    Remove Role
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-          )}
-
-          {/* Support Tickets Tab */}
-          {canViewSupport && (
-            <TabsContent value="support">
-              <div className="grid gap-6">
-                {/* Assign Support Role - Owner only */}
-                {isOwner && (
-                  <Card className="border-border bg-card">
-                    <CardHeader>
-                      <CardTitle className="text-card-foreground">Assign Support Team Role</CardTitle>
-                      <CardDescription>Grant support team access to users</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex gap-3">
-                        <Input
-                          placeholder="Enter email address"
-                          value={assignRoleEmail}
-                          onChange={(e) => setAssignRoleEmail(e.target.value)}
-                          className="bg-input border-border"
-                        />
-                        <Select value={assignRoleType || ""} onValueChange={(v: any) => setAssignRoleType(v)}>
-                          <SelectTrigger className="w-[200px] bg-input border-border">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="support_team">Support Team</SelectItem>
-                            <SelectItem value="corporate_staff">Corporate Staff</SelectItem>
-                            <SelectItem value="corporate_developer">Corporate Developer</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          onClick={handleAssignSupportRole}
-                          className="bg-accent text-accent-foreground hover:bg-accent/90"
-                        >
-                          Assign Role
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Support Tickets */}
-                <Card className="border-border bg-card">
-                  <CardHeader>
-                    <CardTitle className="text-card-foreground">Support Tickets</CardTitle>
-                    <CardDescription>View and respond to user support requests</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ScrollArea className="h-[600px]">
-                      {supportTickets.length === 0 ? (
-                        <div className="text-center py-12 text-muted-foreground">
-                          <Headset className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                          <p>No support tickets yet</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          {supportTickets.map((ticket) => (
-                            <div key={ticket.id} className="p-4 rounded-lg border border-border bg-secondary/20">
-                              <div className="flex items-start justify-between mb-3">
-                                <div>
-                                  <h3 className="font-medium text-foreground">{ticket.subject}</h3>
-                                  <p className="text-sm text-muted-foreground">
-                                    From: {ticket.userName} ({ticket.userEmail})
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {new Date(ticket.createdAt).toLocaleString()}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  {getStatusBadge(ticket.status)}
-                                  <Badge
-                                    className={
-                                      ticket.priority === "high"
-                                        ? "bg-red-500/20 text-red-500 border-red-500/30"
-                                        : ticket.priority === "medium"
-                                          ? "bg-yellow-500/20 text-yellow-500 border-yellow-500/30"
-                                          : "bg-blue-500/20 text-blue-500 border-blue-500/30"
-                                    }
-                                  >
-                                    {ticket.priority}
-                                  </Badge>
-                                </div>
-                              </div>
-
-                              <div className="p-3 rounded-lg bg-background border border-border mb-3">
-                                <p className="text-sm text-foreground whitespace-pre-wrap">{ticket.message}</p>
-                              </div>
-
-                              {/* Responses */}
-                              {ticket.responses && ticket.responses.length > 0 && (
-                                <div className="space-y-2 mb-3">
-                                  <p className="text-sm font-medium text-muted-foreground">Responses:</p>
-                                  {ticket.responses.map((response) => (
-                                    <div
-                                      key={response.id}
-                                      className={`p-3 rounded-lg ${response.isStaff ? "bg-accent/10 border border-accent/20" : "bg-background border border-border"}`}
-                                    >
-                                      <div className="flex items-center gap-2 mb-1">
-                                        <span className="text-xs font-medium text-foreground">
-                                          {response.respondedBy}
-                                        </span>
-                                        {response.isStaff && (
-                                          <Badge className="text-xs bg-accent/20 text-accent">Staff</Badge>
-                                        )}
-                                        <span className="text-xs text-muted-foreground ml-auto">
-                                          {new Date(response.timestamp).toLocaleString()}
-                                        </span>
-                                      </div>
-                                      <p className="text-sm text-foreground whitespace-pre-wrap">{response.message}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-
-                              {/* Action Buttons */}
-                              <div className="flex flex-wrap gap-2 mb-3">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleUpdateTicketStatus(ticket.id, "in_progress")}
-                                  disabled={ticket.status === "in_progress"}
-                                >
-                                  In Progress
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleUpdateTicketStatus(ticket.id, "resolved")}
-                                  disabled={ticket.status === "resolved"}
-                                  className="text-green-500 hover:text-green-600"
-                                >
-                                  Resolve
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleUpdateTicketStatus(ticket.id, "closed")}
-                                  disabled={ticket.status === "closed"}
-                                >
-                                  Close
-                                </Button>
-                              </div>
-
-                              {/* Add Response */}
-                              <div className="flex gap-2">
-                                <Textarea
-                                  placeholder="Type your response..."
-                                  value={ticketResponses[ticket.id] || ""}
-                                  onChange={(e) =>
-                                    setTicketResponses({ ...ticketResponses, [ticket.id]: e.target.value })
-                                  }
-                                  className="flex-1 bg-input border-border min-h-[80px]"
-                                />
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleAddTicketResponse(ticket.id)}
-                                  disabled={!ticketResponses[ticket.id]?.trim()}
-                                  className="bg-accent text-accent-foreground"
-                                >
-                                  <Send className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-          )}
-
+          {/* Messages Tab */}
           {isOwner && (
             <TabsContent value="messages">
               <Card className="border-border bg-card">
                 <CardHeader>
-                  <CardTitle className="text-card-foreground">User Chat Messages</CardTitle>
-                  <CardDescription>Review all user messages from EchoAI</CardDescription>
+                  <CardTitle className="text-card-foreground">User Messages</CardTitle>
+                  <CardDescription>View all EchoAI chat messages from users</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="mb-4">
-                    <div className="flex gap-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
-                        placeholder="Search by email or message content..."
+                        placeholder="Search by email or content..."
                         value={messageSearch}
                         onChange={(e) => setMessageSearch(e.target.value)}
-                        className="flex-1 bg-background border-border text-foreground"
+                        className="pl-10"
                       />
-                      <Button variant="outline" onClick={() => setMessageSearch("")}>
-                        Clear
-                      </Button>
                     </div>
                   </div>
-                  <ScrollArea className="h-[500px]">
+                  <ScrollArea className="h-[400px]">
                     {filteredMessages.length === 0 ? (
                       <div className="text-center py-12 text-muted-foreground">
                         <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
                         <p>No messages found</p>
                       </div>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="space-y-2">
                         {filteredMessages.map((msg) => (
-                          <div key={msg.id} className="p-4 rounded-lg border border-border bg-secondary/20">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Badge variant={msg.role === "user" ? "default" : "secondary"}>
-                                {msg.role === "user" ? "User" : "AI"}
-                              </Badge>
-                              <span className="text-sm font-medium text-foreground">{msg.userEmail}</span>
-                              <span className="text-xs text-muted-foreground ml-auto">
+                          <div
+                            key={msg.id}
+                            className={`p-3 rounded-lg border ${
+                              msg.role === "user" ? "border-accent/20 bg-accent/5" : "border-border bg-secondary/20"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-medium text-accent">{msg.userEmail || "Unknown User"}</span>
+                              <span className="text-xs text-muted-foreground">
                                 {new Date(msg.timestamp).toLocaleString()}
                               </span>
                             </div>
-                            <p className="text-sm text-foreground whitespace-pre-wrap">{msg.content}</p>
+                            <p className="text-sm text-foreground">{msg.content}</p>
                           </div>
                         ))}
                       </div>
@@ -1198,118 +1216,92 @@ export default function AdminPage() {
             </TabsContent>
           )}
 
-          {/* Credentials Tab */}
+          {/* Credentials Tab - Now showing global credentials */}
           {isOwner && (
             <TabsContent value="credentials">
-              <div className="grid gap-6">
-                {/* Search Credential */}
-                <Card className="border-border bg-card">
-                  <CardHeader>
-                    <div className="flex items-center gap-2">
-                      <Search className="h-5 w-5 text-accent" />
-                      <CardTitle className="text-card-foreground">Lookup Credentials</CardTitle>
-                    </div>
-                    <CardDescription>
-                      Search for a user&apos;s email and password by their email address
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex gap-3 mb-4">
-                      <Input
-                        placeholder="Enter email to lookup"
-                        value={credentialSearch}
-                        onChange={(e) => setCredentialSearch(e.target.value)}
-                        className="bg-input border-border"
-                      />
-                      <Button
-                        onClick={handleSearchCredential}
-                        className="bg-accent text-accent-foreground hover:bg-accent/90"
-                      >
+              <Card className="border-border bg-card">
+                <CardHeader>
+                  <CardTitle className="text-card-foreground">User Credentials (Global)</CardTitle>
+                  <CardDescription>View all user credentials across all devices</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* Search */}
+                  <div className="mb-6">
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search by email..."
+                          value={credentialSearch}
+                          onChange={(e) => setCredentialSearch(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
+                      <Button onClick={handleSearchCredential}>
+                        <Search className="h-4 w-4 mr-2" />
                         Search
                       </Button>
                     </div>
                     {foundCredential && (
-                      <div className="p-4 rounded-lg border border-accent/30 bg-accent/5">
-                        <div className="grid gap-2">
-                          <div>
-                            <span className="text-sm text-muted-foreground">Email:</span>
-                            <p className="font-mono text-foreground">{foundCredential.email}</p>
-                          </div>
-                          <div>
-                            <span className="text-sm text-muted-foreground">Password:</span>
-                            <p className="font-mono text-foreground">{foundCredential.password}</p>
-                          </div>
-                          <div>
-                            <span className="text-sm text-muted-foreground">Created:</span>
-                            <p className="text-sm text-foreground">
-                              {new Date(foundCredential.createdAt).toLocaleString()}
-                            </p>
-                          </div>
+                      <div className="mt-4 p-4 rounded-lg border border-accent/20 bg-accent/5">
+                        <h4 className="font-medium text-foreground mb-2">Found Credential:</h4>
+                        <div className="space-y-1">
+                          <p className="text-sm">
+                            <span className="text-muted-foreground">Email:</span>{" "}
+                            <span className="text-foreground">{foundCredential.email}</span>
+                          </p>
+                          <p className="text-sm">
+                            <span className="text-muted-foreground">Password:</span>{" "}
+                            <span className="text-foreground font-mono">{foundCredential.password}</span>
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Created: {new Date(foundCredential.createdAt).toLocaleString()}
+                          </p>
                         </div>
                       </div>
                     )}
-                    {credentialSearch && !foundCredential && (
-                      <div className="p-4 rounded-lg border border-red-500/30 bg-red-500/5 text-red-400">
-                        No credentials found for this email. The user may have signed up with Google/Discord.
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                  </div>
 
-                {/* All Credentials */}
-                <Card className="border-border bg-card">
-                  <CardHeader>
-                    <div className="flex items-center gap-2">
-                      <Key className="h-5 w-5 text-yellow-500" />
-                      <CardTitle className="text-card-foreground">All Stored Credentials</CardTitle>
-                    </div>
-                    <CardDescription>All email/password combinations from account signups</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ScrollArea className="h-[300px]">
-                      {credentials.length === 0 ? (
-                        <div className="text-center py-12 text-muted-foreground">
-                          <Key className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                          <p>No stored credentials yet</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {credentials.map((cred, idx) => (
-                            <div key={idx} className="p-4 rounded-lg border border-border bg-secondary/20">
-                              <div className="grid gap-1">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm text-muted-foreground">Email:</span>
-                                  <span className="font-mono text-foreground text-sm">{cred.email}</span>
+                  {/* All Credentials List */}
+                  <div>
+                    <h3 className="text-sm font-medium text-foreground mb-3">All Credentials ({credentials.length})</h3>
+                    {isLoadingGlobal ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin text-accent" />
+                        <span className="ml-2 text-muted-foreground">Loading global credentials...</span>
+                      </div>
+                    ) : (
+                      <ScrollArea className="h-[350px]">
+                        {credentials.length === 0 ? (
+                          <div className="text-center py-12 text-muted-foreground">
+                            <Key className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                            <p>No credentials stored</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {credentials.map((cred, idx) => (
+                              <div
+                                key={idx}
+                                className="p-3 rounded-lg border border-border bg-secondary/20 flex items-center justify-between"
+                              >
+                                <div>
+                                  <p className="text-sm font-medium text-foreground">{cred.email}</p>
+                                  <p className="text-xs text-muted-foreground font-mono">{cred.password}</p>
                                 </div>
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm text-muted-foreground">Password:</span>
-                                  <span className="font-mono text-foreground text-sm">{cred.password}</span>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm text-muted-foreground">Created:</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    {new Date(cred.createdAt).toLocaleString()}
-                                  </span>
-                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(cred.createdAt).toLocaleDateString()}
+                                </span>
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
-              </div>
+                            ))}
+                          </div>
+                        )}
+                      </ScrollArea>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
           )}
-
-          {/* Actions Tab */}
-          <TabsContent value="actions">
-            <div className="grid gap-6">
-              {/* Ban User (Moved to its own tab) */}
-              {/* <Ban User section is now in its own tab */}
-            </div>
-          </TabsContent>
         </Tabs>
       </div>
     </main>
