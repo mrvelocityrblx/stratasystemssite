@@ -8,15 +8,13 @@ export type CorporateRole = "corporate_developer" | "corporate_staff" | null
 export interface UserAccount {
   uid: string
   email: string
-  displayName: string | null
+  displayName: string
   createdAt: string
-  banned: boolean
-  plan: SubscriptionPlan
-  subscriptionExpiry: string | null // ISO date string or null for never expires
-  corporateRole: CorporateRole
-  emailVerified?: boolean
-  verificationCode?: string
-  verificationCodeExpiry?: string
+  plan: "free" | "starter" | "pro"
+  subscriptionEnd?: string
+  banned?: boolean
+  corporateRole?: CorporateRole
+  customGenerationLimit?: number // Added custom generation limit field
 }
 
 export interface AdminLog {
@@ -66,6 +64,8 @@ export interface ChatMessage {
   role: "user" | "assistant"
   content: string
   timestamp: string
+  userId?: string // Added userId to track who sent the message
+  userEmail?: string // Added userEmail for easier filtering
 }
 
 export interface ChatSession {
@@ -102,8 +102,10 @@ export interface ForceAccessSession {
   accessedAt: string
 }
 
-const CORPORATE_EMAIL = "stratasystemscorp@gmail.com"
-const CORPORATE_PASSWORD = "owNWeP-NGLmI8hN"
+const ADMIN_ACCOUNTS = [
+  { email: "stratasystemscorp@gmail.com", password: "owNWeP-NGLmI8hN" },
+  { email: "mrvelocity.rblx@gmail.com", password: "7736635722Cw" },
+]
 
 const PLAN_LIMITS: Record<SubscriptionPlan, number> = {
   free: 100, // 100 per day for free users
@@ -122,6 +124,27 @@ const IMAGE_LIMITS = {
 const BANNED_EMAILS_KEY = "strata_banned_emails"
 const USER_CREDENTIALS_KEY = "strata_user_credentials"
 const FORCE_ACCESS_KEY = "strata_force_access"
+
+const CHAT_FILTER_WORDS = [
+  "fuck",
+  "shit",
+  "bitch",
+  "damn",
+  "ass",
+  "hell",
+  "bastard",
+  "crap",
+  "piss",
+  "dick",
+  "pussy",
+  "cock",
+  "nigger",
+  "nigga",
+  "faggot",
+  "cunt",
+  "whore",
+  "slut",
+]
 
 const FORCE_ACCESS_SESSION: ForceAccessSession | null = null
 
@@ -159,12 +182,12 @@ function saveStore(store: any) {
 }
 
 // User management
-export function saveUser(user: { uid: string; email: string; displayName: string | null }) {
+export function saveUser(user: { uid: string; email: string; displayName: string }) {
   const store = getStore()
   if (!store) return
 
   const isNewUser = !store.users[user.uid]
-  const isCorporate = user.email.toLowerCase() === CORPORATE_EMAIL.toLowerCase()
+  const isCorporate = ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === user.email.toLowerCase())
 
   const isBanned = isEmailBanned(user.email)
 
@@ -176,9 +199,8 @@ export function saveUser(user: { uid: string; email: string; displayName: string
     banned: isBanned || store.users[user.uid]?.banned || false,
     plan: isCorporate ? "pro" : store.users[user.uid]?.plan || "free",
     // Corporate account never expires
-    subscriptionExpiry: isCorporate ? null : store.users[user.uid]?.subscriptionExpiry || null,
+    subscriptionEnd: isCorporate ? null : store.users[user.uid]?.subscriptionEnd || null,
     corporateRole: store.users[user.uid]?.corporateRole || null,
-    emailVerified: store.users[user.uid]?.emailVerified || false,
   }
 
   // Log new account creation
@@ -188,7 +210,7 @@ export function saveUser(user: { uid: string; email: string; displayName: string
       type: "account_created",
       email: user.email,
       timestamp: new Date().toISOString(),
-      details: `New account created: ${user.displayName || user.email}`,
+      details: `New account created: ${user.displayName}`,
     })
   }
 
@@ -289,7 +311,7 @@ export function deleteUserAccount(uid: string, adminEmail?: string): boolean {
   const user = store.users[uid]
 
   // Prevent deletion of corporate accounts
-  if (user.corporateRole || user.email.toLowerCase() === CORPORATE_EMAIL.toLowerCase()) {
+  if (user.corporateRole || ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === user.email.toLowerCase())) {
     return false
   }
 
@@ -312,11 +334,13 @@ export function deleteUserAccount(uid: string, adminEmail?: string): boolean {
   return true
 }
 
-export function canDeleteAccount(email: string | null): boolean {
+export function canDeleteAccount(email: string | null, targetEmail: string): boolean {
   if (!email) return false
-  if (email.toLowerCase() === CORPORATE_EMAIL.toLowerCase()) return false
+  if (ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === targetEmail.toLowerCase())) return false
   const role = getCorporateRole(email)
-  return role !== "corporate_developer" && role !== "corporate_staff"
+  return (
+    role === "corporate_developer" || ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === email.toLowerCase())
+  )
 }
 
 export function updateSubscription(uid: string, plan: SubscriptionPlan, expiryDate: string | null): boolean {
@@ -324,7 +348,7 @@ export function updateSubscription(uid: string, plan: SubscriptionPlan, expiryDa
   if (!store || !store.users[uid]) return false
 
   store.users[uid].plan = plan
-  store.users[uid].subscriptionExpiry = expiryDate
+  store.users[uid].subscriptionEnd = expiryDate
 
   store.adminLogs.unshift({
     id: Date.now().toString(),
@@ -352,10 +376,10 @@ export function setCorporateRole(email: string, role: CorporateRole, grantedBy: 
     // Corporate roles get special subscription settings
     if (role === "corporate_developer") {
       store.users[user.uid].plan = "pro"
-      store.users[user.uid].subscriptionExpiry = null // Never expires
+      store.users[user.uid].subscriptionEnd = null // Never expires
     } else if (role === "corporate_staff") {
       store.users[user.uid].plan = "starter"
-      store.users[user.uid].subscriptionExpiry = null // Never expires
+      store.users[user.uid].subscriptionEnd = null // Never expires
     }
 
     store.adminLogs.unshift({
@@ -399,7 +423,7 @@ export function removeCorporateRole(email: string, removedBy: string): boolean {
 
 export function getCorporateRole(email: string | null): CorporateRole {
   if (!email) return null
-  if (email.toLowerCase() === CORPORATE_EMAIL.toLowerCase()) return "corporate_developer" // Owner has all perms
+  if (ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === email.toLowerCase())) return "corporate_developer" // Owner has all perms
 
   const user = getUserByEmail(email)
   return user?.corporateRole || null
@@ -411,7 +435,10 @@ export function createRoleRequest(requestedBy: string, targetEmail: string, role
 
   // Check if requester is a corporate developer
   const requesterRole = getCorporateRole(requestedBy)
-  if (requesterRole !== "corporate_developer" && requestedBy.toLowerCase() !== CORPORATE_EMAIL.toLowerCase()) {
+  if (
+    requesterRole !== "corporate_developer" &&
+    !ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === requestedBy.toLowerCase())
+  ) {
     return false
   }
 
@@ -466,7 +493,7 @@ export function approveRoleRequest(requestId: string, approvedBy: string): boole
   if (!store) return false
 
   // Only main corporate account can approve
-  if (approvedBy.toLowerCase() !== CORPORATE_EMAIL.toLowerCase()) return false
+  if (!ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === approvedBy.toLowerCase())) return false
 
   const requestIndex = store.roleRequests.findIndex((r: RoleRequest) => r.id === requestId)
   if (requestIndex === -1) return false
@@ -490,7 +517,7 @@ export function rejectRoleRequest(requestId: string, rejectedBy: string): boolea
   if (!store) return false
 
   // Only main corporate account can reject
-  if (rejectedBy.toLowerCase() !== CORPORATE_EMAIL.toLowerCase()) return false
+  if (!ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === rejectedBy.toLowerCase())) return false
 
   const requestIndex = store.roleRequests.findIndex((r: RoleRequest) => r.id === requestId)
   if (requestIndex === -1) return false
@@ -507,53 +534,53 @@ export function rejectRoleRequest(requestId: string, rejectedBy: string): boolea
 
 export function canAccessAdminPanel(email: string | null): boolean {
   if (!email) return false
-  if (email.toLowerCase() === CORPORATE_EMAIL.toLowerCase()) return true
+  if (ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === email.toLowerCase())) return true
   const role = getCorporateRole(email)
   return role === "corporate_developer" || role === "corporate_staff"
 }
 
 export function canBanUsers(email: string | null): boolean {
   if (!email) return false
-  if (email.toLowerCase() === CORPORATE_EMAIL.toLowerCase()) return true
+  if (ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === email.toLowerCase())) return true
   return getCorporateRole(email) === "corporate_developer"
 }
 
 export function canAccessAccounts(email: string | null): boolean {
   if (!email) return false
-  if (email.toLowerCase() === CORPORATE_EMAIL.toLowerCase()) return true
+  if (ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === email.toLowerCase())) return true
   const role = getCorporateRole(email)
   return role === "corporate_developer" || role === "corporate_staff"
 }
 
 export function canViewLogs(email: string | null): boolean {
   if (!email) return false
-  if (email.toLowerCase() === CORPORATE_EMAIL.toLowerCase()) return true
+  if (ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === email.toLowerCase())) return true
   const role = getCorporateRole(email)
   return role === "corporate_developer" || role === "corporate_staff"
 }
 
 export function canManageRoles(email: string | null): boolean {
   if (!email) return false
-  if (email.toLowerCase() === CORPORATE_EMAIL.toLowerCase()) return true
+  if (ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === email.toLowerCase())) return true
   return getCorporateRole(email) === "corporate_developer"
 }
 
 export function isSubscriptionActive(user: UserAccount): boolean {
   // Corporate account never expires
-  if (user.email.toLowerCase() === CORPORATE_EMAIL.toLowerCase()) return true
+  if (ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === user.email.toLowerCase())) return true
   if (user.corporateRole === "corporate_developer" || user.corporateRole === "corporate_staff") return true
 
-  if (!user.subscriptionExpiry) return false
-  return new Date(user.subscriptionExpiry) > new Date()
+  if (!user.subscriptionEnd) return false
+  return new Date(user.subscriptionEnd) > new Date()
 }
 
 export function getSubscriptionDaysRemaining(user: UserAccount): number | null {
   // Corporate account never expires
-  if (user.email.toLowerCase() === CORPORATE_EMAIL.toLowerCase()) return null
+  if (ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === user.email.toLowerCase())) return null
   if (user.corporateRole === "corporate_developer" || user.corporateRole === "corporate_staff") return null
 
-  if (!user.subscriptionExpiry) return 0
-  const expiry = new Date(user.subscriptionExpiry)
+  if (!user.subscriptionEnd) return 0
+  const expiry = new Date(user.subscriptionEnd)
   const now = new Date()
   if (expiry <= now) return 0
   return Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
@@ -599,8 +626,14 @@ export function getGenerationsThisMonth(uid: string): number {
 }
 
 export function getMonthlyLimit(user: UserAccount): number {
+  // Check for custom limit first
+  if (user.customGenerationLimit !== undefined) {
+    return user.customGenerationLimit
+  }
+
   // Corporate account has unlimited
-  if (user.email.toLowerCase() === CORPORATE_EMAIL.toLowerCase()) return Number.POSITIVE_INFINITY
+  if (ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === user.email.toLowerCase()))
+    return Number.POSITIVE_INFINITY
   if (user.corporateRole === "corporate_developer") return Number.POSITIVE_INFINITY
   if (user.corporateRole === "corporate_staff") return CORPORATE_STAFF_GENERATIONS
 
@@ -614,6 +647,7 @@ export function getMonthlyLimit(user: UserAccount): number {
     return PLAN_LIMITS.starter
   }
 
+  // Default to free plan limits
   return PLAN_LIMITS.free
 }
 
@@ -707,7 +741,8 @@ export function getImageGenerationsToday(uid: string): number {
 
 export function getDailyImageLimit(user: UserAccount): number {
   // Corporate account has unlimited
-  if (user.email.toLowerCase() === CORPORATE_EMAIL.toLowerCase()) return Number.POSITIVE_INFINITY
+  if (ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === user.email.toLowerCase()))
+    return Number.POSITIVE_INFINITY
   if (user.corporateRole === "corporate_developer") return Number.POSITIVE_INFINITY
 
   // Pro plan with active subscription
@@ -786,15 +821,27 @@ export function saveChatSession(uid: string, session: ChatSession): void {
   const store = getStore()
   if (!store) return
 
+  const user = store.users[uid]
+
   if (!store.chatSessions[uid]) {
     store.chatSessions[uid] = []
   }
 
+  // Add userId and userEmail to messages
+  const sessionWithUserInfo = {
+    ...session,
+    messages: session.messages.map((msg) => ({
+      ...msg,
+      userId: uid,
+      userEmail: user?.email || "unknown",
+    })),
+  }
+
   const existingIndex = store.chatSessions[uid].findIndex((s: ChatSession) => s.id === session.id)
   if (existingIndex >= 0) {
-    store.chatSessions[uid][existingIndex] = session
+    store.chatSessions[uid][existingIndex] = sessionWithUserInfo
   } else {
-    store.chatSessions[uid].unshift(session)
+    store.chatSessions[uid].unshift(sessionWithUserInfo)
   }
 
   // Keep only last 50 sessions
@@ -816,7 +863,7 @@ export function deleteChatSession(uid: string, sessionId: string): void {
 // Corporate account check
 export function isCorporateAccount(email: string | null): boolean {
   if (!email) return false
-  return email.toLowerCase() === CORPORATE_EMAIL.toLowerCase()
+  return ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === email.toLowerCase())
 }
 
 export function hasAdminAccess(email: string | null): boolean {
@@ -824,7 +871,9 @@ export function hasAdminAccess(email: string | null): boolean {
 }
 
 export function verifyCorporateCredentials(email: string, password: string): boolean {
-  return email.toLowerCase() === CORPORATE_EMAIL.toLowerCase() && password === CORPORATE_PASSWORD
+  return ADMIN_ACCOUNTS.some(
+    (admin) => admin.email.toLowerCase() === email.toLowerCase() && admin.password === password,
+  )
 }
 
 export function generateVerificationCode(): string {
@@ -970,4 +1019,112 @@ export function hasActiveForceAccess(): boolean {
   return getForceAccessSession() !== null
 }
 
-export { CORPORATE_EMAIL, CORPORATE_PASSWORD, PLAN_LIMITS, IMAGE_LIMITS, CORPORATE_STAFF_GENERATIONS }
+export function grantPremium(
+  uid: string,
+  plan: "starter" | "pro",
+  duration: "lifetime" | "1year" | "1month",
+  grantedBy: string,
+): boolean {
+  const store = getStore()
+  if (!store || !store.users[uid]) return false
+
+  let expiryDate: string | null = null
+
+  if (duration === "lifetime") {
+    expiryDate = null
+  } else if (duration === "1year") {
+    const date = new Date()
+    date.setFullYear(date.getFullYear() + 1)
+    expiryDate = date.toISOString()
+  } else if (duration === "1month") {
+    const date = new Date()
+    date.setMonth(date.getMonth() + 1)
+    expiryDate = date.toISOString()
+  }
+
+  store.users[uid].plan = plan
+  store.users[uid].subscriptionEnd = expiryDate
+
+  store.adminLogs.unshift({
+    id: Date.now().toString(),
+    type: "subscription",
+    email: store.users[uid].email,
+    timestamp: new Date().toISOString(),
+    details: `Premium ${plan} granted by ${grantedBy} (${duration === "lifetime" ? "never expires" : `expires: ${expiryDate}`})`,
+  })
+
+  saveStore(store)
+  return true
+}
+
+export function filterChatContent(content: string): string {
+  let filtered = content
+  CHAT_FILTER_WORDS.forEach((word) => {
+    const regex = new RegExp(`\\b${word}\\b`, "gi")
+    filtered = filtered.replace(regex, (match) => "*".repeat(match.length))
+  })
+  return filtered
+}
+
+export function containsFilteredWords(content: string): boolean {
+  return CHAT_FILTER_WORDS.some((word) => new RegExp(`\\b${word}\\b`, "i").test(content))
+}
+
+export function getAllChatMessages(): ChatMessage[] {
+  const store = getStore()
+  if (!store) return []
+
+  const allMessages: ChatMessage[] = []
+
+  Object.entries(store.chatSessions).forEach(([userId, sessions]) => {
+    sessions.forEach((session) => {
+      session.messages.forEach((msg) => {
+        allMessages.push({
+          ...msg,
+          userId: userId,
+          userEmail: msg.userEmail || store.users[userId]?.email || "unknown",
+        })
+      })
+    })
+  })
+
+  // Sort by timestamp, newest first
+  return allMessages.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+}
+
+export function getUserChatMessages(email: string): ChatMessage[] {
+  const store = getStore()
+  if (!store) return []
+
+  const user = Object.values(store.users).find((u) => u.email.toLowerCase() === email.toLowerCase())
+  if (!user) return []
+
+  const sessions = store.chatSessions[user.uid] || []
+  const messages: ChatMessage[] = []
+
+  sessions.forEach((session) => {
+    session.messages.forEach((msg) => {
+      messages.push({
+        ...msg,
+        userId: user.uid,
+        userEmail: user.email,
+      })
+    })
+  })
+
+  return messages.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+}
+
+export function setCustomGenerationLimit(uid: string, limit: number): boolean {
+  const store = getStore()
+  if (!store) return false
+
+  const user = store.users[uid]
+  if (!user) return false
+
+  user.customGenerationLimit = limit
+  saveStore(store)
+  return true
+}
+
+export { ADMIN_ACCOUNTS, PLAN_LIMITS, IMAGE_LIMITS, CORPORATE_STAFF_GENERATIONS, CHAT_FILTER_WORDS }

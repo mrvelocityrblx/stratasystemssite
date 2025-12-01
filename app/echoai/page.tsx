@@ -35,6 +35,7 @@ import {
   getChatSessions,
   saveChatSession,
   deleteChatSession,
+  filterChatContent, // Added filter import
   type ChatSession,
 } from "@/lib/store"
 
@@ -132,10 +133,12 @@ export default function EchoAIPage() {
       return
     }
 
+    const filteredInput = filterChatContent(input.trim())
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input.trim(),
+      content: filteredInput,
     }
 
     setMessages((prev) => [...prev, userMessage])
@@ -229,6 +232,21 @@ export default function EchoAIPage() {
     "What are the best practices for React?",
     "Create a workout plan for beginners",
   ]
+
+  const renderMessageContent = (content: string) => {
+    // Handle bold text
+    const parts = content.split(/(\*\*.*?\*\*)/g)
+    return parts.map((part, index) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return (
+          <strong key={index} className="font-bold">
+            {part.slice(2, -2)}
+          </strong>
+        )
+      }
+      return part
+    })
+  }
 
   if (loading) {
     return (
@@ -425,7 +443,9 @@ export default function EchoAIPage() {
                           : "bg-card text-card-foreground border-border"
                       }`}
                     >
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                        {renderMessageContent(message.content)}
+                      </p>
                     </Card>
                     {message.role === "user" && (
                       <div className="flex-shrink-0 w-8 h-8 rounded-full bg-secondary flex items-center justify-center">

@@ -29,6 +29,8 @@ import {
   Trash2,
   Key,
   Search,
+  MessageSquare,
+  Hash,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
@@ -54,11 +56,15 @@ import {
   canDeleteAccount, // Import canDelete check
   getUserCredentials, // Import credentials functions
   getCredentialByEmail,
+  grantPremium, // Added import for grantPremium
+  getAllChatMessages, // Added chat message imports
+  setCustomGenerationLimit, // Added custom generation limit
   type UserAccount,
   type AdminLog,
   type RoleRequest,
   type CorporateRole,
-  type UserCredential, // Import credential type
+  type UserCredential,
+  type ChatMessage, // Added ChatMessage type
 } from "@/lib/store"
 
 export default function AdminPage() {
@@ -74,6 +80,10 @@ export default function AdminPage() {
   const [credentials, setCredentials] = useState<UserCredential[]>([])
   const [credentialSearch, setCredentialSearch] = useState("")
   const [foundCredential, setFoundCredential] = useState<UserCredential | null>(null)
+  const [grantingPremium, setGrantingPremium] = useState<{ [key: string]: boolean }>({})
+  const [allMessages, setAllMessages] = useState<ChatMessage[]>([]) // Added message state
+  const [messageSearch, setMessageSearch] = useState("") // Added message search
+  const [customGenerations, setCustomGenerations] = useState<{ [key: string]: string }>({}) // Added custom generations state
 
   const isOwner = isCorporateAccount(user?.email || null)
   const hasAccess = canAccessAdminPanel(user?.email || null)
@@ -99,6 +109,7 @@ export default function AdminPage() {
     setLogs(getAdminLogs())
     setRoleRequests(getPendingRoleRequests())
     setCredentials(getUserCredentials()) // Load credentials
+    setAllMessages(getAllChatMessages()) // Load all messages
   }
 
   const handleBanUser = (emailToBan?: string) => {
@@ -233,6 +244,47 @@ export default function AdminPage() {
     setTimeout(() => setMessage(null), 3000)
   }
 
+  const handleGrantPremium = async (
+    uid: string,
+    plan: "starter" | "pro",
+    duration: "lifetime" | "1year" | "1month",
+  ) => {
+    if (!user?.email) return
+
+    setGrantingPremium({ ...grantingPremium, [uid]: true })
+
+    const success = grantPremium(uid, plan, duration, user.email)
+
+    if (success) {
+      setMessage({ type: "success", text: `Premium ${plan} granted to ${uid}` }) // Changed to uid as email might not be unique
+      refreshData()
+    } else {
+      setMessage({ type: "error", text: `Failed to grant premium to ${uid}` })
+    }
+
+    setGrantingPremium({ ...grantingPremium, [uid]: false })
+    setTimeout(() => setMessage(null), 5000)
+  }
+
+  const handleSetCustomGenerations = (uid: string) => {
+    const limit = customGenerations[uid]
+    if (!limit || isNaN(Number(limit))) {
+      setMessage({ type: "error", text: "Please enter a valid number" })
+      setTimeout(() => setMessage(null), 3000)
+      return
+    }
+
+    const success = setCustomGenerationLimit(uid, Number(limit))
+    if (success) {
+      setMessage({ type: "success", text: "Custom generation limit set successfully" })
+      setCustomGenerations({ ...customGenerations, [uid]: "" })
+      refreshData()
+    } else {
+      setMessage({ type: "error", text: "Failed to set custom generation limit" })
+    }
+    setTimeout(() => setMessage(null), 3000)
+  }
+
   const getLogIcon = (type: AdminLog["type"]) => {
     switch (type) {
       case "account_created":
@@ -278,6 +330,13 @@ export default function AdminPage() {
   }
 
   const corporateUsers = users.filter((u) => u.corporateRole)
+  const filteredMessages = messageSearch
+    ? allMessages.filter(
+        (msg) =>
+          msg.userEmail?.toLowerCase().includes(messageSearch.toLowerCase()) ||
+          msg.content.toLowerCase().includes(messageSearch.toLowerCase()),
+      )
+    : allMessages
 
   return (
     <main className="min-h-screen bg-background">
@@ -441,34 +500,42 @@ export default function AdminPage() {
           </Card>
         </div>
 
-        <Tabs defaultValue="users" className="space-y-6">
-          <TabsList className="bg-secondary/50">
-            <TabsTrigger value="users">
+        <Tabs defaultValue="users" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 bg-secondary border border-border">
+            <TabsTrigger value="users" className="text-foreground data-[state=active]:bg-card">
               <Users className="h-4 w-4 mr-2" />
               Users
             </TabsTrigger>
             {canViewLogs(user?.email || null) && (
-              <TabsTrigger value="logs">
+              <TabsTrigger value="logs" className="text-foreground data-[state=active]:bg-card">
                 <FileText className="h-4 w-4 mr-2" />
                 Logs
               </TabsTrigger>
             )}
+            {canBanUsers(user?.email || null) && (
+              <TabsTrigger value="ban" className="text-foreground data-[state=active]:bg-card">
+                <Ban className="h-4 w-4 mr-2" />
+                Ban Users
+              </TabsTrigger>
+            )}
+            {canManageRoles(user?.email || null) && (
+              <TabsTrigger value="roles" className="text-foreground data-[state=active]:bg-card">
+                <UserCog className="h-4 w-4 mr-2" />
+                Roles
+              </TabsTrigger>
+            )}
             {isOwner && (
-              <TabsTrigger value="credentials">
+              <TabsTrigger value="messages" className="text-foreground data-[state=active]:bg-card">
+                <MessageSquare className="h-4 w-4 mr-2" />
+                Messages
+              </TabsTrigger>
+            )}
+            {isOwner && (
+              <TabsTrigger value="credentials" className="text-foreground data-[state=active]:bg-card">
                 <Key className="h-4 w-4 mr-2" />
                 Credentials
               </TabsTrigger>
             )}
-            {canManageRoles(user?.email || null) && (
-              <TabsTrigger value="roles">
-                <UserCog className="h-4 w-4 mr-2" />
-                Corporate Roles
-              </TabsTrigger>
-            )}
-            <TabsTrigger value="actions">
-              <Shield className="h-4 w-4 mr-2" />
-              Actions
-            </TabsTrigger>
           </TabsList>
 
           {/* Users Tab */}
@@ -476,73 +543,146 @@ export default function AdminPage() {
             <Card className="border-border bg-card">
               <CardHeader>
                 <CardTitle className="text-card-foreground">All Users</CardTitle>
-                <CardDescription>View and manage all registered accounts</CardDescription>
+                <CardDescription>Manage user accounts and grant premium</CardDescription>
               </CardHeader>
               <CardContent>
-                <ScrollArea className="h-[400px]">
+                <ScrollArea className="h-[500px]">
                   {users.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground">
                       <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>No users registered yet</p>
+                      <p>No users found</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
                       {users.map((u) => (
-                        <div
-                          key={u.uid}
-                          className="flex items-center justify-between p-4 rounded-lg border border-border bg-secondary/20"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
-                              <span className="text-accent font-medium">
-                                {u.displayName?.[0] || u.email[0].toUpperCase()}
-                              </span>
-                            </div>
-                            <div>
-                              <p className="font-medium text-foreground flex items-center gap-2">
-                                {u.displayName || "No name"}
-                                {u.banned && <Badge variant="destructive">Banned</Badge>}
-                                {getRoleBadge(u.corporateRole)}
-                              </p>
+                        <div key={u.uid} className="p-4 rounded-lg border border-border bg-secondary/20">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="font-medium text-foreground">{u.displayName}</p>
+                                {u.corporateRole && (
+                                  <Badge variant="outline" className="text-xs text-blue-500 border-blue-500/20">
+                                    {u.corporateRole === "corporate_developer" ? "Developer" : "Staff"}
+                                  </Badge>
+                                )}
+                                {u.banned && (
+                                  <Badge variant="outline" className="text-xs text-red-500 border-red-500/20">
+                                    Banned
+                                  </Badge>
+                                )}
+                              </div>
                               <p className="text-sm text-muted-foreground">{u.email}</p>
+                              <div className="flex items-center gap-2 mt-2">
+                                <Badge variant="outline">{u.plan}</Badge>
+                                {u.subscriptionEnd && (
+                                  <span className="text-xs text-muted-foreground">
+                                    Until {new Date(u.subscriptionEnd).toLocaleDateString()}
+                                  </span>
+                                )}
+                                {u.customGenerationLimit !== undefined && (
+                                  <Badge variant="outline" className="text-xs">
+                                    <Hash className="h-3 w-3 mr-1" />
+                                    {u.customGenerationLimit === Number.POSITIVE_INFINITY
+                                      ? "Unlimited"
+                                      : u.customGenerationLimit}
+                                  </Badge>
+                                )}
+                              </div>
+
+                              {isOwner && !u.corporateRole && (
+                                <div className="mt-3 flex items-center gap-2">
+                                  <Input
+                                    type="number"
+                                    placeholder="Custom generation limit"
+                                    value={customGenerations[u.uid] || ""}
+                                    onChange={(e) =>
+                                      setCustomGenerations({ ...customGenerations, [u.uid]: e.target.value })
+                                    }
+                                    className="w-48 h-8 text-sm"
+                                  />
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleSetCustomGenerations(u.uid)}
+                                    disabled={!customGenerations[u.uid]}
+                                    className="h-8"
+                                  >
+                                    Set Limit
+                                  </Button>
+                                </div>
+                              )}
+
+                              {/* Grant Premium Section */}
+                              {isOwner && !u.corporateRole && (
+                                <div className="mt-3 flex flex-wrap items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Grant Premium:</span>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleGrantPremium(u.uid, "starter", "1month")}
+                                    disabled={grantingPremium[u.uid]}
+                                    className="h-7 text-xs"
+                                  >
+                                    Starter 1mo
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleGrantPremium(u.uid, "starter", "1year")}
+                                    disabled={grantingPremium[u.uid]}
+                                    className="h-7 text-xs"
+                                  >
+                                    Starter 1yr
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleGrantPremium(u.uid, "starter", "lifetime")}
+                                    disabled={grantingPremium[u.uid]}
+                                    className="h-7 text-xs"
+                                  >
+                                    Starter ∞
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleGrantPremium(u.uid, "pro", "1month")}
+                                    disabled={grantingPremium[u.uid]}
+                                    className="h-7 text-xs"
+                                  >
+                                    Pro 1mo
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleGrantPremium(u.uid, "pro", "1year")}
+                                    disabled={grantingPremium[u.uid]}
+                                    className="h-7 text-xs"
+                                  >
+                                    Pro 1yr
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleGrantPremium(u.uid, "pro", "lifetime")}
+                                    disabled={grantingPremium[u.uid]}
+                                    className="h-7 text-xs"
+                                  >
+                                    Pro ∞
+                                  </Button>
+                                </div>
+                              )}
                             </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(u.createdAt).toLocaleDateString()}
-                            </span>
-                            {canBanUsers(user?.email || null) && (
-                              <>
-                                {u.banned ? (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleUnbanUser(u.email)}
-                                    className="text-green-500 border-green-500/20 hover:bg-green-500/10"
-                                  >
-                                    Unban
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleBanUser(u.email)}
-                                    className="text-red-500 border-red-500/20 hover:bg-red-500/10"
-                                  >
-                                    Ban
-                                  </Button>
-                                )}
-                                {canDeleteAccount(u.email) && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleDeleteAccount(u.uid, u.email)}
-                                    className="text-red-500 border-red-500/20 hover:bg-red-500/10"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                )}
-                              </>
+
+                            {/* Delete button */}
+                            {canDeleteAccount(user?.email || null, u.email) && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDeleteAccount(u.uid, u.email)}
+                                className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             )}
                           </div>
                         </div>
@@ -599,6 +739,187 @@ export default function AdminPage() {
             </TabsContent>
           )}
 
+          {/* Ban User Tab */}
+          {canBanUsers(user?.email || null) && (
+            <TabsContent value="ban">
+              <Card className="border-border bg-card">
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Ban className="h-5 w-5 text-red-500" />
+                    <CardTitle className="text-card-foreground">Ban User Account</CardTitle>
+                  </div>
+                  <CardDescription>
+                    Permanently ban a user. They will be unable to log in or access their account.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-3">
+                    <Input
+                      placeholder="Enter user email to ban"
+                      value={banEmail}
+                      onChange={(e) => setBanEmail(e.target.value)}
+                      className="bg-input border-border"
+                    />
+                    <Button onClick={() => handleBanUser()} variant="destructive">
+                      Ban User
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {/* Corporate Roles Tab */}
+          {canManageRoles(user?.email || null) && (
+            <TabsContent value="roles">
+              <div className="grid gap-6">
+                {/* Assign Role */}
+                <Card className="border-border bg-card">
+                  <CardHeader>
+                    <CardTitle className="text-card-foreground">Assign Corporate Role</CardTitle>
+                    <CardDescription>
+                      {isOwner
+                        ? "Grant corporate roles to users (user must have an existing account)"
+                        : "Request corporate staff role (requires owner approval)"}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex gap-3">
+                      <Input
+                        placeholder="Enter email address"
+                        value={roleEmail}
+                        onChange={(e) => setRoleEmail(e.target.value)}
+                        className="bg-input border-border"
+                      />
+                      <Select
+                        value={selectedRole || ""}
+                        onValueChange={(value) => setSelectedRole(value as CorporateRole)}
+                      >
+                        <SelectTrigger className="w-[200px] bg-input border-border">
+                          <SelectValue placeholder="Select role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {isOwner && <SelectItem value="corporate_developer">Corporate Developer</SelectItem>}
+                          <SelectItem value="corporate_staff">Corporate Staff</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        onClick={handleAssignRole}
+                        className="bg-accent text-accent-foreground hover:bg-accent/90"
+                      >
+                        {isOwner ? "Assign Role" : "Request Role"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Current Corporate Users */}
+                <Card className="border-border bg-card">
+                  <CardHeader>
+                    <CardTitle className="text-card-foreground">Corporate Users</CardTitle>
+                    <CardDescription>Users with corporate roles</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[300px]">
+                      {corporateUsers.length === 0 ? (
+                        <div className="text-center py-12 text-muted-foreground">
+                          <UserCog className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                          <p>No corporate users yet</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {corporateUsers.map((u) => (
+                            <div
+                              key={u.uid}
+                              className="flex items-center justify-between p-4 rounded-lg border border-border bg-secondary/20"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
+                                  <span className="text-accent font-medium">
+                                    {u.displayName?.[0] || u.email[0].toUpperCase()}
+                                  </span>
+                                </div>
+                                <div>
+                                  <p className="font-medium text-foreground">{u.displayName || "No name"}</p>
+                                  <p className="text-sm text-muted-foreground">{u.email}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {getRoleBadge(u.corporateRole)}
+                                {isOwner && u.email.toLowerCase() !== "stratasystemscorp@gmail.com" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleRemoveRole(u.email)}
+                                    className="text-red-500 border-red-500/20 hover:bg-red-500/10"
+                                  >
+                                    Remove Role
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+          )}
+
+          {isOwner && (
+            <TabsContent value="messages">
+              <Card className="border-border bg-card">
+                <CardHeader>
+                  <CardTitle className="text-card-foreground">User Chat Messages</CardTitle>
+                  <CardDescription>Review all user messages from EchoAI</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="mb-4">
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Search by email or message content..."
+                        value={messageSearch}
+                        onChange={(e) => setMessageSearch(e.target.value)}
+                        className="flex-1 bg-background border-border text-foreground"
+                      />
+                      <Button variant="outline" onClick={() => setMessageSearch("")}>
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+                  <ScrollArea className="h-[500px]">
+                    {filteredMessages.length === 0 ? (
+                      <div className="text-center py-12 text-muted-foreground">
+                        <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>No messages found</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {filteredMessages.map((msg) => (
+                          <div key={msg.id} className="p-4 rounded-lg border border-border bg-secondary/20">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Badge variant={msg.role === "user" ? "default" : "secondary"}>
+                                {msg.role === "user" ? "User" : "AI"}
+                              </Badge>
+                              <span className="text-sm font-medium text-foreground">{msg.userEmail}</span>
+                              <span className="text-xs text-muted-foreground ml-auto">
+                                {new Date(msg.timestamp).toLocaleString()}
+                              </span>
+                            </div>
+                            <p className="text-sm text-foreground whitespace-pre-wrap">{msg.content}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {/* Credentials Tab */}
           {isOwner && (
             <TabsContent value="credentials">
               <div className="grid gap-6">
@@ -703,135 +1024,11 @@ export default function AdminPage() {
             </TabsContent>
           )}
 
-          {/* Corporate Roles Tab */}
-          {canManageRoles(user?.email || null) && (
-            <TabsContent value="roles">
-              <div className="grid gap-6">
-                {/* Assign Role */}
-                <Card className="border-border bg-card">
-                  <CardHeader>
-                    <CardTitle className="text-card-foreground">Assign Corporate Role</CardTitle>
-                    <CardDescription>
-                      {isOwner
-                        ? "Grant corporate roles to users (user must have an existing account)"
-                        : "Request corporate staff role (requires owner approval)"}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex gap-3">
-                      <Input
-                        placeholder="Enter email address"
-                        value={roleEmail}
-                        onChange={(e) => setRoleEmail(e.target.value)}
-                        className="bg-input border-border"
-                      />
-                      <Select
-                        value={selectedRole || ""}
-                        onValueChange={(value) => setSelectedRole(value as CorporateRole)}
-                      >
-                        <SelectTrigger className="w-[200px] bg-input border-border">
-                          <SelectValue placeholder="Select role" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {isOwner && <SelectItem value="corporate_developer">Corporate Developer</SelectItem>}
-                          <SelectItem value="corporate_staff">Corporate Staff</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        onClick={handleAssignRole}
-                        className="bg-accent text-accent-foreground hover:bg-accent/90"
-                      >
-                        {isOwner ? "Assign Role" : "Request Role"}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Current Corporate Users */}
-                <Card className="border-border bg-card">
-                  <CardHeader>
-                    <CardTitle className="text-card-foreground">Corporate Users</CardTitle>
-                    <CardDescription>Users with corporate roles</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ScrollArea className="h-[300px]">
-                      {corporateUsers.length === 0 ? (
-                        <div className="text-center py-12 text-muted-foreground">
-                          <UserCog className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                          <p>No corporate users yet</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {corporateUsers.map((u) => (
-                            <div
-                              key={u.uid}
-                              className="flex items-center justify-between p-4 rounded-lg border border-border bg-secondary/20"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
-                                  <span className="text-accent font-medium">
-                                    {u.displayName?.[0] || u.email[0].toUpperCase()}
-                                  </span>
-                                </div>
-                                <div>
-                                  <p className="font-medium text-foreground">{u.displayName || "No name"}</p>
-                                  <p className="text-sm text-muted-foreground">{u.email}</p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {getRoleBadge(u.corporateRole)}
-                                {isOwner && u.email.toLowerCase() !== "stratasystemscorp@gmail.com" && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleRemoveRole(u.email)}
-                                    className="text-red-500 border-red-500/20 hover:bg-red-500/10"
-                                  >
-                                    Remove Role
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-          )}
-
           {/* Actions Tab */}
           <TabsContent value="actions">
             <div className="grid gap-6">
-              {/* Ban User */}
-              {canBanUsers(user?.email || null) && (
-                <Card className="border-border bg-card">
-                  <CardHeader>
-                    <div className="flex items-center gap-2">
-                      <Ban className="h-5 w-5 text-red-500" />
-                      <CardTitle className="text-card-foreground">Ban User</CardTitle>
-                    </div>
-                    <CardDescription>
-                      Terminate a user account. They will be logged out and cannot log back in.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex gap-3">
-                      <Input
-                        placeholder="Enter email to ban"
-                        value={banEmail}
-                        onChange={(e) => setBanEmail(e.target.value)}
-                        className="bg-input border-border"
-                      />
-                      <Button onClick={() => handleBanUser()} variant="destructive">
-                        Ban User
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+              {/* Ban User (Moved to its own tab) */}
+              {/* <Ban User section is now in its own tab */}
             </div>
           </TabsContent>
         </Tabs>
