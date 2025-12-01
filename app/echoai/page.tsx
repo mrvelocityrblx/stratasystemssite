@@ -35,7 +35,6 @@ import {
   getChatSessions,
   saveChatSession,
   deleteChatSession,
-  filterChatContent, // Added filter import
   type ChatSession,
 } from "@/lib/store"
 
@@ -133,12 +132,10 @@ export default function EchoAIPage() {
       return
     }
 
-    const filteredInput = filterChatContent(input.trim())
-
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: filteredInput,
+      content: input.trim(),
     }
 
     setMessages((prev) => [...prev, userMessage])

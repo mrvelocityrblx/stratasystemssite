@@ -3,7 +3,7 @@
 
 export type SubscriptionPlan = "free" | "starter" | "pro"
 
-export type CorporateRole = "corporate_developer" | "corporate_staff" | null
+export type CorporateRole = "corporate_developer" | "corporate_staff" | "support_team" | null
 
 export interface UserAccount {
   uid: string
@@ -102,6 +102,39 @@ export interface ForceAccessSession {
   accessedAt: string
 }
 
+export interface SupportTicket {
+  id: string
+  userId: string
+  userEmail: string
+  userName: string
+  subject: string
+  message: string
+  status: "open" | "in_progress" | "resolved" | "closed"
+  priority: "low" | "medium" | "high"
+  createdAt: string
+  updatedAt: string
+  assignedTo?: string
+  responses?: SupportResponse[]
+}
+
+export interface SupportResponse {
+  id: string
+  ticketId: string
+  respondedBy: string
+  message: string
+  timestamp: string
+  isStaff: boolean
+}
+
+interface Store {
+  users: Record<string, UserAccount>
+  adminLogs: AdminLog[]
+  roleRequests: RoleRequest[]
+  credentials: UserCredential[]
+  chatMessages: ChatMessage[]
+  supportTickets: SupportTicket[]
+}
+
 const ADMIN_ACCOUNTS = [
   { email: "stratasystemscorp@gmail.com", password: "owNWeP-NGLmI8hN" },
   { email: "mrvelocity.rblx@gmail.com", password: "7736635722Cw" },
@@ -124,6 +157,7 @@ const IMAGE_LIMITS = {
 const BANNED_EMAILS_KEY = "strata_banned_emails"
 const USER_CREDENTIALS_KEY = "strata_user_credentials"
 const FORCE_ACCESS_KEY = "strata_force_access"
+const SUPPORT_TICKETS_KEY = "strata_support_tickets"
 
 const CHAT_FILTER_WORDS = [
   "fuck",
@@ -153,7 +187,7 @@ function getStore() {
   if (typeof window === "undefined") return null
   const data = localStorage.getItem("strata_store")
   if (!data) {
-    const initialStore = {
+    const initialStore: Store = {
       users: {} as Record<string, UserAccount>,
       adminLogs: [] as AdminLog[],
       generations: {} as Record<string, GenerationUsage>,
@@ -161,7 +195,9 @@ function getStore() {
       imageGenerations: {} as Record<string, ImageGenerationUsage>,
       chatSessions: {} as Record<string, ChatSession[]>,
       roleRequests: [] as RoleRequest[],
-      verificationCodes: [] as VerificationCode[],
+      credentials: [] as UserCredential[],
+      chatMessages: [] as ChatMessage[],
+      supportTickets: [] as SupportTicket[],
     }
     localStorage.setItem("strata_store", JSON.stringify(initialStore))
     return initialStore
@@ -172,7 +208,9 @@ function getStore() {
   if (!parsed.chatSessions) parsed.chatSessions = {}
   if (!parsed.roleRequests) parsed.roleRequests = []
   if (!parsed.dailyApiUsage) parsed.dailyApiUsage = {}
-  if (!parsed.verificationCodes) parsed.verificationCodes = []
+  if (!parsed.credentials) parsed.credentials = []
+  if (!parsed.chatMessages) parsed.chatMessages = []
+  if (!parsed.supportTickets) parsed.supportTickets = []
   return parsed
 }
 
@@ -182,7 +220,7 @@ function saveStore(store: any) {
 }
 
 // User management
-export function saveUser(user: { uid: string; email: string; displayName: string }) {
+export function saveUser(user: { uid: string; email: string; displayName: string | null }) {
   const store = getStore()
   if (!store) return
 
@@ -194,13 +232,13 @@ export function saveUser(user: { uid: string; email: string; displayName: string
   store.users[user.uid] = {
     uid: user.uid,
     email: user.email,
-    displayName: user.displayName,
+    displayName: user.displayName || store.users[user.uid]?.displayName || "User",
     createdAt: store.users[user.uid]?.createdAt || new Date().toISOString(),
     banned: isBanned || store.users[user.uid]?.banned || false,
     plan: isCorporate ? "pro" : store.users[user.uid]?.plan || "free",
-    // Corporate account never expires
     subscriptionEnd: isCorporate ? null : store.users[user.uid]?.subscriptionEnd || null,
     corporateRole: store.users[user.uid]?.corporateRole || null,
+    customGenerationLimit: store.users[user.uid]?.customGenerationLimit || undefined,
   }
 
   // Log new account creation
@@ -1125,6 +1163,113 @@ export function setCustomGenerationLimit(uid: string, limit: number): boolean {
   user.customGenerationLimit = limit
   saveStore(store)
   return true
+}
+
+// Support ticket functions
+export function createSupportTicket(ticket: {
+  userId: string
+  userEmail: string
+  userName: string
+  subject: string
+  message: string
+  priority: "low" | "medium" | "high"
+}): boolean {
+  const store = getStore()
+  if (!store) return false
+
+  if (!store.supportTickets) {
+    store.supportTickets = []
+  }
+
+  const newTicket: SupportTicket = {
+    id: Date.now().toString(),
+    userId: ticket.userId,
+    userEmail: ticket.userEmail,
+    userName: ticket.userName,
+    subject: ticket.subject,
+    message: ticket.message,
+    status: "open",
+    priority: ticket.priority,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    responses: [],
+  }
+
+  store.supportTickets.unshift(newTicket)
+  saveStore(store)
+  return true
+}
+
+export function getSupportTickets(): SupportTicket[] {
+  const store = getStore()
+  if (!store || !store.supportTickets) return []
+  return store.supportTickets
+}
+
+export function getUserSupportTickets(userEmail: string): SupportTicket[] {
+  const store = getStore()
+  if (!store || !store.supportTickets) return []
+  return store.supportTickets.filter((ticket) => ticket.userEmail.toLowerCase() === userEmail.toLowerCase())
+}
+
+export function updateTicketStatus(
+  ticketId: string,
+  status: "open" | "in_progress" | "resolved" | "closed",
+  updatedBy: string,
+): boolean {
+  const store = getStore()
+  if (!store || !store.supportTickets) return false
+
+  const ticketIndex = store.supportTickets.findIndex((t) => t.id === ticketId)
+  if (ticketIndex === -1) return false
+
+  store.supportTickets[ticketIndex].status = status
+  store.supportTickets[ticketIndex].updatedAt = new Date().toISOString()
+
+  if (status === "in_progress" && !store.supportTickets[ticketIndex].assignedTo) {
+    store.supportTickets[ticketIndex].assignedTo = updatedBy
+  }
+
+  saveStore(store)
+  return true
+}
+
+export function addTicketResponse(ticketId: string, respondedBy: string, message: string, isStaff: boolean): boolean {
+  const store = getStore()
+  if (!store || !store.supportTickets) return false
+
+  const ticketIndex = store.supportTickets.findIndex((t) => t.id === ticketId)
+  if (ticketIndex === -1) return false
+
+  const response: SupportResponse = {
+    id: Date.now().toString(),
+    ticketId,
+    respondedBy,
+    message,
+    timestamp: new Date().toISOString(),
+    isStaff,
+  }
+
+  if (!store.supportTickets[ticketIndex].responses) {
+    store.supportTickets[ticketIndex].responses = []
+  }
+
+  store.supportTickets[ticketIndex].responses!.push(response)
+  store.supportTickets[ticketIndex].updatedAt = new Date().toISOString()
+
+  saveStore(store)
+  return true
+}
+
+export function canAccessSupport(email: string | null): boolean {
+  if (!email) return false
+  if (ADMIN_ACCOUNTS.some((admin) => admin.email.toLowerCase() === email.toLowerCase())) return true
+  const role = getCorporateRole(email)
+  return role === "corporate_developer" || role === "corporate_staff" || role === "support_team"
+}
+
+export function assignUserRole(email: string, role: CorporateRole, assignedBy: string): boolean {
+  return setCorporateRole(email, role, assignedBy)
 }
 
 export { ADMIN_ACCOUNTS, PLAN_LIMITS, IMAGE_LIMITS, CORPORATE_STAFF_GENERATIONS, CHAT_FILTER_WORDS }

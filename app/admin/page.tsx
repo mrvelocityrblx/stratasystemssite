@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import {
   ArrowLeft,
   Shield,
@@ -31,6 +32,9 @@ import {
   Search,
   MessageSquare,
   Hash,
+  ShieldCheck,
+  Headset,
+  Send,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
@@ -52,19 +56,25 @@ import {
   approveRoleRequest,
   rejectRoleRequest,
   canAccessAdminPanel,
-  deleteUserAccount, // Import delete function
-  canDeleteAccount, // Import canDelete check
-  getUserCredentials, // Import credentials functions
+  deleteUserAccount,
+  canDeleteAccount,
+  getUserCredentials,
   getCredentialByEmail,
-  grantPremium, // Added import for grantPremium
-  getAllChatMessages, // Added chat message imports
-  setCustomGenerationLimit, // Added custom generation limit
+  grantPremium,
+  getAllChatMessages,
+  setCustomGenerationLimit,
+  getSupportTickets,
+  updateTicketStatus,
+  addTicketResponse,
+  canAccessSupport,
+  assignUserRole,
   type UserAccount,
   type AdminLog,
   type RoleRequest,
   type CorporateRole,
   type UserCredential,
-  type ChatMessage, // Added ChatMessage type
+  type ChatMessage,
+  type SupportTicket,
 } from "@/lib/store"
 
 export default function AdminPage() {
@@ -74,19 +84,24 @@ export default function AdminPage() {
   const [logs, setLogs] = useState<AdminLog[]>([])
   const [roleRequests, setRoleRequests] = useState<RoleRequest[]>([])
   const [banEmail, setBanEmail] = useState("")
-  const [roleEmail, setRoleEmail] = useState("")
+  const [assignRoleEmailState, setAssignRoleEmailState] = useState("") // Renamed from roleEmail to avoid conflict
   const [selectedRole, setSelectedRole] = useState<CorporateRole>("corporate_staff")
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [credentials, setCredentials] = useState<UserCredential[]>([])
   const [credentialSearch, setCredentialSearch] = useState("")
   const [foundCredential, setFoundCredential] = useState<UserCredential | null>(null)
   const [grantingPremium, setGrantingPremium] = useState<{ [key: string]: boolean }>({})
-  const [allMessages, setAllMessages] = useState<ChatMessage[]>([]) // Added message state
-  const [messageSearch, setMessageSearch] = useState("") // Added message search
-  const [customGenerations, setCustomGenerations] = useState<{ [key: string]: string }>({}) // Added custom generations state
+  const [allMessages, setAllMessages] = useState<ChatMessage[]>([])
+  const [messageSearch, setMessageSearch] = useState("")
+  const [customGenerations, setCustomGenerations] = useState<{ [key: string]: string }>({})
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([])
+  const [ticketResponses, setTicketResponses] = useState<{ [key: string]: string }>({})
+  const [assignRoleEmail, setAssignRoleEmail] = useState("") // This is the new state variable for the support role assignment
+  const [assignRoleType, setAssignRoleType] = useState<CorporateRole>("support_team")
 
   const isOwner = isCorporateAccount(user?.email || null)
   const hasAccess = canAccessAdminPanel(user?.email || null)
+  const canViewSupport = canAccessSupport(user?.email || null)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -108,8 +123,9 @@ export default function AdminPage() {
     setUsers(getAllUsers())
     setLogs(getAdminLogs())
     setRoleRequests(getPendingRoleRequests())
-    setCredentials(getUserCredentials()) // Load credentials
-    setAllMessages(getAllChatMessages()) // Load all messages
+    setCredentials(getUserCredentials())
+    setAllMessages(getAllChatMessages())
+    setSupportTickets(getSupportTickets())
   }
 
   const handleBanUser = (emailToBan?: string) => {
@@ -165,37 +181,41 @@ export default function AdminPage() {
     setFoundCredential(found)
   }
 
-  const handleAssignRole = () => {
-    if (!roleEmail.trim() || !selectedRole) return
+  const handleAssignCorporateRole = () => {
+    // Renamed function to be specific
+    if (!assignRoleEmailState.trim() || !selectedRole) return // Use the renamed state variable
 
     // Check if target user exists first
-    const targetUser = getUserByEmail(roleEmail)
+    const targetUser = getUserByEmail(assignRoleEmailState)
     if (!targetUser) {
-      setMessage({ type: "error", text: `User not found: ${roleEmail}. The user must have an account first.` })
+      setMessage({
+        type: "error",
+        text: `User not found: ${assignRoleEmailState}. The user must have an account first.`,
+      })
       setTimeout(() => setMessage(null), 3000)
       return
     }
 
     if (isOwner) {
       // Owner can directly assign any role
-      const success = setCorporateRole(roleEmail, selectedRole, user?.email || "")
+      const success = setCorporateRole(assignRoleEmailState, selectedRole, user?.email || "")
       if (success) {
         setMessage({
           type: "success",
-          text: `Successfully assigned ${selectedRole === "corporate_developer" ? "Corporate Developer" : "Corporate Staff"} to ${roleEmail}`,
+          text: `Successfully assigned ${selectedRole === "corporate_developer" ? "Corporate Developer" : "Corporate Staff"} to ${assignRoleEmailState}`,
         })
-        setRoleEmail("")
+        setAssignRoleEmailState("") // Clear the renamed state variable
         refreshData()
       } else {
-        setMessage({ type: "error", text: `Failed to assign role to ${roleEmail}` })
+        setMessage({ type: "error", text: `Failed to assign role to ${assignRoleEmailState}` })
       }
     } else if (corporateRole === "corporate_developer") {
       // Developers can only request staff roles, which need approval
       if (selectedRole === "corporate_staff") {
-        const success = createRoleRequest(user?.email || "", roleEmail, selectedRole)
+        const success = createRoleRequest(user?.email || "", assignRoleEmailState, selectedRole)
         if (success) {
           setMessage({ type: "success", text: `Role request sent for approval. The owner will review it.` })
-          setRoleEmail("")
+          setAssignRoleEmailState("") // Clear the renamed state variable
           refreshData()
         } else {
           setMessage({
@@ -285,6 +305,50 @@ export default function AdminPage() {
     setTimeout(() => setMessage(null), 3000)
   }
 
+  const handleUpdateTicketStatus = (ticketId: string, status: "open" | "in_progress" | "resolved" | "closed") => {
+    const success = updateTicketStatus(ticketId, status, user?.email || "")
+    if (success) {
+      setMessage({ type: "success", text: `Ticket status updated to ${status}` })
+      refreshData()
+    }
+    setTimeout(() => setMessage(null), 3000)
+  }
+
+  const handleAddTicketResponse = (ticketId: string) => {
+    const response = ticketResponses[ticketId]
+    if (!response || !response.trim()) return
+
+    const success = addTicketResponse(ticketId, user?.email || "", response, true)
+    if (success) {
+      setMessage({ type: "success", text: "Response added successfully" })
+      setTicketResponses({ ...ticketResponses, [ticketId]: "" })
+      refreshData()
+    }
+    setTimeout(() => setMessage(null), 3000)
+  }
+
+  // This is the corrected `handleAssignRole` for the support team tab.
+  const handleAssignSupportRole = () => {
+    if (!assignRoleEmail.trim() || !assignRoleType) return
+
+    const targetUser = getUserByEmail(assignRoleEmail)
+    if (!targetUser) {
+      setMessage({ type: "error", text: "User not found" })
+      setTimeout(() => setMessage(null), 3000)
+      return
+    }
+
+    const success = assignUserRole(assignRoleEmail, assignRoleType, user?.email || "")
+    if (success) {
+      setMessage({ type: "success", text: `Role ${assignRoleType} assigned to ${assignRoleEmail}` })
+      setAssignRoleEmail("")
+      refreshData()
+    } else {
+      setMessage({ type: "error", text: "Failed to assign role" })
+    }
+    setTimeout(() => setMessage(null), 3000)
+  }
+
   const getLogIcon = (type: AdminLog["type"]) => {
     switch (type) {
       case "account_created":
@@ -313,7 +377,25 @@ export default function AdminPage() {
     if (role === "corporate_developer") {
       return <Badge className="bg-purple-500/20 text-purple-500 border-purple-500/30">Developer</Badge>
     }
+    if (role === "support_team") {
+      return <Badge className="bg-green-500/20 text-green-500 border-green-500/30">Support Team</Badge>
+    }
     return <Badge className="bg-blue-500/20 text-blue-500 border-blue-500/30">Staff</Badge>
+  }
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "open":
+        return <Badge className="bg-blue-500/20 text-blue-500 border-blue-500/30">Open</Badge>
+      case "in_progress":
+        return <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30">In Progress</Badge>
+      case "resolved":
+        return <Badge className="bg-green-500/20 text-green-500 border-green-500/30">Resolved</Badge>
+      case "closed":
+        return <Badge className="bg-gray-500/20 text-gray-500 border-gray-500/30">Closed</Badge>
+      default:
+        return <Badge>{status}</Badge>
+    }
   }
 
   if (loading) {
@@ -358,7 +440,9 @@ export default function AdminPage() {
                     ? "Owner Access"
                     : corporateRole === "corporate_developer"
                       ? "Developer Access"
-                      : "Staff Access"}
+                      : corporateRole === "support_team"
+                        ? "Support Team Access"
+                        : "Staff Access"}
                 </p>
               </div>
             </div>
@@ -501,7 +585,7 @@ export default function AdminPage() {
         </div>
 
         <Tabs defaultValue="users" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 bg-secondary border border-border">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 bg-secondary border border-border">
             <TabsTrigger value="users" className="text-foreground data-[state=active]:bg-card">
               <Users className="h-4 w-4 mr-2" />
               Users
@@ -522,6 +606,12 @@ export default function AdminPage() {
               <TabsTrigger value="roles" className="text-foreground data-[state=active]:bg-card">
                 <UserCog className="h-4 w-4 mr-2" />
                 Roles
+              </TabsTrigger>
+            )}
+            {canViewSupport && (
+              <TabsTrigger value="support" className="text-foreground data-[state=active]:bg-card">
+                <Headset className="h-4 w-4 mr-2" />
+                Support
               </TabsTrigger>
             )}
             {isOwner && (
@@ -673,17 +763,34 @@ export default function AdminPage() {
                               )}
                             </div>
 
-                            {/* Delete button */}
-                            {canDeleteAccount(user?.email || null, u.email) && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleDeleteAccount(u.uid, u.email)}
-                                className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
+                            {/* Buttons Section */}
+                            <div className="flex items-center gap-2">
+                              {/* Unban button - only show for banned users */}
+                              {u.banned && canBanUsers(user?.email || null) && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleUnbanUser(u.email)}
+                                  className="text-green-500 hover:text-green-600 hover:bg-green-500/10"
+                                  title="Unban user"
+                                >
+                                  <ShieldCheck className="h-4 w-4" />
+                                </Button>
+                              )}
+
+                              {/* Delete button */}
+                              {canDeleteAccount(user?.email || null, u.email) && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleDeleteAccount(u.uid, u.email)}
+                                  className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                                  title="Delete account"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -787,8 +894,8 @@ export default function AdminPage() {
                     <div className="flex gap-3">
                       <Input
                         placeholder="Enter email address"
-                        value={roleEmail}
-                        onChange={(e) => setRoleEmail(e.target.value)}
+                        value={assignRoleEmailState} // Use the renamed state variable
+                        onChange={(e) => setAssignRoleEmailState(e.target.value)} // Update the renamed state variable
                         className="bg-input border-border"
                       />
                       <Select
@@ -804,7 +911,7 @@ export default function AdminPage() {
                         </SelectContent>
                       </Select>
                       <Button
-                        onClick={handleAssignRole}
+                        onClick={handleAssignCorporateRole} // Call the renamed function
                         className="bg-accent text-accent-foreground hover:bg-accent/90"
                       >
                         {isOwner ? "Assign Role" : "Request Role"}
@@ -856,6 +963,178 @@ export default function AdminPage() {
                                     Remove Role
                                   </Button>
                                 )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+          )}
+
+          {/* Support Tickets Tab */}
+          {canViewSupport && (
+            <TabsContent value="support">
+              <div className="grid gap-6">
+                {/* Assign Support Role - Owner only */}
+                {isOwner && (
+                  <Card className="border-border bg-card">
+                    <CardHeader>
+                      <CardTitle className="text-card-foreground">Assign Support Team Role</CardTitle>
+                      <CardDescription>Grant support team access to users</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex gap-3">
+                        <Input
+                          placeholder="Enter email address"
+                          value={assignRoleEmail}
+                          onChange={(e) => setAssignRoleEmail(e.target.value)}
+                          className="bg-input border-border"
+                        />
+                        <Select value={assignRoleType || ""} onValueChange={(v: any) => setAssignRoleType(v)}>
+                          <SelectTrigger className="w-[200px] bg-input border-border">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="support_team">Support Team</SelectItem>
+                            <SelectItem value="corporate_staff">Corporate Staff</SelectItem>
+                            <SelectItem value="corporate_developer">Corporate Developer</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          onClick={handleAssignSupportRole}
+                          className="bg-accent text-accent-foreground hover:bg-accent/90"
+                        >
+                          Assign Role
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Support Tickets */}
+                <Card className="border-border bg-card">
+                  <CardHeader>
+                    <CardTitle className="text-card-foreground">Support Tickets</CardTitle>
+                    <CardDescription>View and respond to user support requests</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[600px]">
+                      {supportTickets.length === 0 ? (
+                        <div className="text-center py-12 text-muted-foreground">
+                          <Headset className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                          <p>No support tickets yet</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {supportTickets.map((ticket) => (
+                            <div key={ticket.id} className="p-4 rounded-lg border border-border bg-secondary/20">
+                              <div className="flex items-start justify-between mb-3">
+                                <div>
+                                  <h3 className="font-medium text-foreground">{ticket.subject}</h3>
+                                  <p className="text-sm text-muted-foreground">
+                                    From: {ticket.userName} ({ticket.userEmail})
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Date(ticket.createdAt).toLocaleString()}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {getStatusBadge(ticket.status)}
+                                  <Badge
+                                    className={
+                                      ticket.priority === "high"
+                                        ? "bg-red-500/20 text-red-500 border-red-500/30"
+                                        : ticket.priority === "medium"
+                                          ? "bg-yellow-500/20 text-yellow-500 border-yellow-500/30"
+                                          : "bg-blue-500/20 text-blue-500 border-blue-500/30"
+                                    }
+                                  >
+                                    {ticket.priority}
+                                  </Badge>
+                                </div>
+                              </div>
+
+                              <div className="p-3 rounded-lg bg-background border border-border mb-3">
+                                <p className="text-sm text-foreground whitespace-pre-wrap">{ticket.message}</p>
+                              </div>
+
+                              {/* Responses */}
+                              {ticket.responses && ticket.responses.length > 0 && (
+                                <div className="space-y-2 mb-3">
+                                  <p className="text-sm font-medium text-muted-foreground">Responses:</p>
+                                  {ticket.responses.map((response) => (
+                                    <div
+                                      key={response.id}
+                                      className={`p-3 rounded-lg ${response.isStaff ? "bg-accent/10 border border-accent/20" : "bg-background border border-border"}`}
+                                    >
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-xs font-medium text-foreground">
+                                          {response.respondedBy}
+                                        </span>
+                                        {response.isStaff && (
+                                          <Badge className="text-xs bg-accent/20 text-accent">Staff</Badge>
+                                        )}
+                                        <span className="text-xs text-muted-foreground ml-auto">
+                                          {new Date(response.timestamp).toLocaleString()}
+                                        </span>
+                                      </div>
+                                      <p className="text-sm text-foreground whitespace-pre-wrap">{response.message}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Action Buttons */}
+                              <div className="flex flex-wrap gap-2 mb-3">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleUpdateTicketStatus(ticket.id, "in_progress")}
+                                  disabled={ticket.status === "in_progress"}
+                                >
+                                  In Progress
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleUpdateTicketStatus(ticket.id, "resolved")}
+                                  disabled={ticket.status === "resolved"}
+                                  className="text-green-500 hover:text-green-600"
+                                >
+                                  Resolve
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleUpdateTicketStatus(ticket.id, "closed")}
+                                  disabled={ticket.status === "closed"}
+                                >
+                                  Close
+                                </Button>
+                              </div>
+
+                              {/* Add Response */}
+                              <div className="flex gap-2">
+                                <Textarea
+                                  placeholder="Type your response..."
+                                  value={ticketResponses[ticket.id] || ""}
+                                  onChange={(e) =>
+                                    setTicketResponses({ ...ticketResponses, [ticket.id]: e.target.value })
+                                  }
+                                  className="flex-1 bg-input border-border min-h-[80px]"
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleAddTicketResponse(ticket.id)}
+                                  disabled={!ticketResponses[ticket.id]?.trim()}
+                                  className="bg-accent text-accent-foreground"
+                                >
+                                  <Send className="h-4 w-4" />
+                                </Button>
                               </div>
                             </div>
                           ))}

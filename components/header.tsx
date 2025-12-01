@@ -17,6 +17,7 @@ import {
   Home,
   CreditCard,
   HelpCircle,
+  HeadphonesIcon,
 } from "lucide-react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
@@ -109,6 +110,13 @@ export function Header() {
             >
               <HelpCircle className="h-4 w-4" />
               FAQ
+            </Link>
+            <Link
+              href="/support"
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <HeadphonesIcon className="h-4 w-4" />
+              Support
             </Link>
             <ThemeToggle />
 
@@ -239,6 +247,13 @@ export function Header() {
             >
               <HelpCircle className="h-4 w-4" />
               FAQ
+            </Link>
+            <Link
+              href="/support"
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <HeadphonesIcon className="h-4 w-4" />
+              Support
             </Link>
 
             <div className="flex flex-col gap-2 pt-4 border-t border-border">

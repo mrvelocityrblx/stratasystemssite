@@ -23,7 +23,7 @@ import { useAuth } from "@/lib/auth-context"
 import { updateProfile, deleteUser } from "firebase/auth"
 import { useRouter } from "next/navigation"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { deleteUserAccount, canDeleteAccount } from "@/lib/store"
+import { deleteUserAccount, canDeleteAccount, saveUser } from "@/lib/store"
 import { auth } from "@/lib/firebase"
 
 export default function SettingsPage() {
@@ -49,9 +49,22 @@ export default function SettingsPage() {
 
     setIsUpdating(true)
     try {
+      // Update Firebase auth profile
       await updateProfile(user, { displayName: displayName.trim() })
+
+      // Also update in our store
+      saveUser({
+        uid: user.uid,
+        email: user.email || "",
+        displayName: displayName.trim(),
+      })
+
       setMessage({ type: "success", text: "Profile updated successfully" })
+
+      // Refresh the page to show updated data
+      setTimeout(() => window.location.reload(), 1000)
     } catch (error) {
+      console.error("Update profile error:", error)
       setMessage({ type: "error", text: "Failed to update profile" })
     }
     setIsUpdating(false)
@@ -222,10 +235,16 @@ export default function SettingsPage() {
             </div>
             {corporateRole && (
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Corporate Role</span>
+                <span className="text-muted-foreground">Role</span>
                 <span className="text-blue-500 font-medium flex items-center gap-1">
                   <Shield className="h-3.5 w-3.5" />
-                  {corporateRole === "corporate_developer" ? "Developer" : "Staff"}
+                  {corporateRole === "corporate_developer"
+                    ? "Developer"
+                    : corporateRole === "corporate_staff"
+                      ? "Staff"
+                      : corporateRole === "support_team"
+                        ? "Support Team"
+                        : "User"}
                 </span>
               </div>
             )}
