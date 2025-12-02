@@ -1,9 +1,19 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Check } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 const pricingPlans = {
   monthly: [
@@ -108,8 +118,18 @@ const pricingPlans = {
 
 export function PricingSection() {
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly")
+  const [showComingSoon, setShowComingSoon] = useState(false)
+  const router = useRouter()
 
   const plans = pricingPlans[billingPeriod]
+
+  const handlePlanClick = (planName: string) => {
+    if (planName === "Enterprise") {
+      router.push("/support")
+    } else {
+      setShowComingSoon(true)
+    }
+  }
 
   return (
     <section id="pricing" className="py-20 px-6">
@@ -180,6 +200,7 @@ export function PricingSection() {
                   ))}
                 </ul>
                 <Button
+                  onClick={() => handlePlanClick(plan.name)}
                   className={`w-full ${
                     plan.popular
                       ? "bg-accent text-accent-foreground hover:bg-accent/90"
@@ -193,6 +214,20 @@ export function PricingSection() {
           ))}
         </div>
       </div>
+
+      <AlertDialog open={showComingSoon} onOpenChange={setShowComingSoon}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Coming Soon</AlertDialogTitle>
+            <AlertDialogDescription>
+              This is currently not up and running, please try again when we post an announcement.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction>OK</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   )
 }

@@ -18,6 +18,7 @@ import {
   CreditCard,
   HelpCircle,
   HeadphonesIcon,
+  Users,
 } from "lucide-react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
@@ -32,9 +33,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [teamModalOpen, setTeamModalOpen] = useState(false)
   const { user, userAccount, isAdmin, remainingGenerations, monthlyLimit, subscriptionActive, corporateRole } =
     useAuth()
   const router = useRouter()
@@ -111,6 +121,69 @@ export function Header() {
               <HelpCircle className="h-4 w-4" />
               FAQ
             </Link>
+            <Dialog open={teamModalOpen} onOpenChange={setTeamModalOpen}>
+              <DialogTrigger asChild>
+                <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <Users className="h-4 w-4" />
+                  Our Team
+                </button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle className="text-2xl">Meet Our Team</DialogTitle>
+                  <DialogDescription>The talented people behind Strata Systems</DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-6 py-4">
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold text-foreground">CEO and Founder</h3>
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary">
+                      <div className="h-12 w-12 rounded-full bg-accent/20 flex items-center justify-center">
+                        <User className="h-6 w-6 text-accent" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">Velocity</p>
+                        <p className="text-sm text-muted-foreground">Chief Executive Officer</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold text-foreground">COO and Co-Founder</h3>
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary">
+                      <div className="h-12 w-12 rounded-full bg-accent/20 flex items-center justify-center">
+                        <User className="h-6 w-6 text-accent" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">Bhulux</p>
+                        <p className="text-sm text-muted-foreground">Chief Operating Officer</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold text-foreground">CTO</h3>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary">
+                        <div className="h-12 w-12 rounded-full bg-accent/20 flex items-center justify-center">
+                          <User className="h-6 w-6 text-accent" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">Lucas</p>
+                          <p className="text-sm text-muted-foreground">Chief Technology Officer</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary">
+                        <div className="h-12 w-12 rounded-full bg-accent/20 flex items-center justify-center">
+                          <User className="h-6 w-6 text-accent" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">Tyler</p>
+                          <p className="text-sm text-muted-foreground">Chief Technology Officer</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
             <Link
               href="/support"
               className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -248,6 +321,69 @@ export function Header() {
               <HelpCircle className="h-4 w-4" />
               FAQ
             </Link>
+            <Dialog open={teamModalOpen} onOpenChange={setTeamModalOpen}>
+              <DialogTrigger asChild>
+                <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors text-left">
+                  <Users className="h-4 w-4" />
+                  Our Team
+                </button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle className="text-2xl">Meet Our Team</DialogTitle>
+                  <DialogDescription>The talented people behind Strata Systems</DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-6 py-4">
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold text-foreground">CEO and Founder</h3>
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary">
+                      <div className="h-12 w-12 rounded-full bg-accent/20 flex items-center justify-center">
+                        <User className="h-6 w-6 text-accent" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">Velocity</p>
+                        <p className="text-sm text-muted-foreground">Chief Executive Officer</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold text-foreground">COO and Co-Founder</h3>
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary">
+                      <div className="h-12 w-12 rounded-full bg-accent/20 flex items-center justify-center">
+                        <User className="h-6 w-6 text-accent" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">Bhulux</p>
+                        <p className="text-sm text-muted-foreground">Chief Operating Officer</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold text-foreground">CTO</h3>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary">
+                        <div className="h-12 w-12 rounded-full bg-accent/20 flex items-center justify-center">
+                          <User className="h-6 w-6 text-accent" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">Lucas</p>
+                          <p className="text-sm text-muted-foreground">Chief Technology Officer</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary">
+                        <div className="h-12 w-12 rounded-full bg-accent/20 flex items-center justify-center">
+                          <User className="h-6 w-6 text-accent" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">Tyler</p>
+                          <p className="text-sm text-muted-foreground">Chief Technology Officer</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
             <Link
               href="/support"
               className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -256,67 +392,65 @@ export function Header() {
               Support
             </Link>
 
-            <div className="flex flex-col gap-2 pt-4 border-t border-border">
-              {user ? (
-                <>
-                  <div className="flex items-center gap-2 mb-2">
-                    {corporateRole && (
-                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/20">
-                        <Shield className="h-3.5 w-3.5 text-blue-500" />
-                        <span className="text-xs font-medium text-blue-500">
-                          {corporateRole === "corporate_developer" ? "Developer" : "Staff"}
-                        </span>
-                      </div>
-                    )}
-                    {(subscriptionActive || isAdmin) && !corporateRole && (
-                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/10 border border-accent/20">
-                        <Crown className="h-3.5 w-3.5 text-accent" />
-                        <span className="text-xs font-medium text-accent">Pro</span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary border border-border">
-                      <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-xs font-medium text-foreground">{formatGenerations()}</span>
+            {user ? (
+              <div className="flex flex-col gap-2 pt-4 border-t border-border">
+                <div className="flex items-center gap-2 mb-2">
+                  {corporateRole && (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/20">
+                      <Shield className="h-3.5 w-3.5 text-blue-500" />
+                      <span className="text-xs font-medium text-blue-500">
+                        {corporateRole === "corporate_developer" ? "Developer" : "Staff"}
+                      </span>
                     </div>
-                  </div>
-                  <Link href="/dashboard">
-                    <Button variant="ghost" className="text-foreground justify-start w-full">
-                      <User className="h-4 w-4 mr-2" />
-                      Dashboard
-                    </Button>
-                  </Link>
-                  <Link href="/settings">
-                    <Button variant="ghost" className="text-foreground justify-start w-full">
-                      <Settings className="h-4 w-4 mr-2" />
-                      Settings
-                    </Button>
-                  </Link>
-                  {isAdmin && (
-                    <Link href="/admin">
-                      <Button variant="ghost" className="text-accent justify-start w-full">
-                        <Shield className="h-4 w-4 mr-2" />
-                        Admin Panel
-                      </Button>
-                    </Link>
                   )}
-                  <Button variant="ghost" className="text-red-500 justify-start w-full" onClick={handleSignOut}>
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Sign Out
+                  {(subscriptionActive || isAdmin) && !corporateRole && (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/10 border border-accent/20">
+                      <Crown className="h-3.5 w-3.5 text-accent" />
+                      <span className="text-xs font-medium text-accent">Pro</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary border border-border">
+                    <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-xs font-medium text-foreground">{formatGenerations()}</span>
+                  </div>
+                </div>
+                <Link href="/dashboard">
+                  <Button variant="ghost" className="text-foreground justify-start w-full">
+                    <User className="h-4 w-4 mr-2" />
+                    Dashboard
                   </Button>
-                </>
-              ) : (
-                <>
-                  <Link href="/login">
-                    <Button variant="ghost" className="text-foreground justify-start w-full">
-                      Log in
+                </Link>
+                <Link href="/settings">
+                  <Button variant="ghost" className="text-foreground justify-start w-full">
+                    <Settings className="h-4 w-4 mr-2" />
+                    Settings
+                  </Button>
+                </Link>
+                {isAdmin && (
+                  <Link href="/admin">
+                    <Button variant="ghost" className="text-accent justify-start w-full">
+                      <Shield className="h-4 w-4 mr-2" />
+                      Admin Panel
                     </Button>
                   </Link>
-                  <Button onClick={handleGetStarted} className="bg-foreground text-background hover:bg-foreground/90">
-                    Get Started
+                )}
+                <Button variant="ghost" className="text-red-500 justify-start w-full" onClick={handleSignOut}>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Link href="/login">
+                  <Button variant="ghost" className="text-foreground justify-start w-full">
+                    Log in
                   </Button>
-                </>
-              )}
-            </div>
+                </Link>
+                <Button onClick={handleGetStarted} className="bg-foreground text-background hover:bg-foreground/90">
+                  Get Started
+                </Button>
+              </>
+            )}
           </div>
         )}
       </div>
