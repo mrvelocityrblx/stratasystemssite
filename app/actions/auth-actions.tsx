@@ -2,7 +2,7 @@
 
 import { Resend } from "resend"
 
-const resend = new Resend(process.env.RESEND_API_KEY || "re_T7YfRniE_Pa9pAdFVzejfjcS2Ase4rZZU")
+const resend = new Resend("re_T7YfRniE_Pa9pAdFVzejfjcS2Ase4rZZU")
 
 /**
  * Send verification email with code
@@ -10,7 +10,6 @@ const resend = new Resend(process.env.RESEND_API_KEY || "re_T7YfRniE_Pa9pAdFVzej
 export async function sendVerificationEmail(email: string, code: string) {
   try {
     console.log("[v0] Attempting to send verification email to:", email)
-    console.log("[v0] Using API key:", process.env.RESEND_API_KEY ? "from env" : "hardcoded")
 
     const { data, error } = await resend.emails.send({
       from: "Strata Systems <onboarding@resend.dev>",
@@ -34,11 +33,6 @@ export async function sendVerificationEmail(email: string, code: string) {
                 border-radius: 12px;
                 padding: 40px;
                 text-align: center;
-              }
-              .logo {
-                width: 80px;
-                height: 80px;
-                margin: 0 auto 20px;
               }
               h1 {
                 color: #ffffff;
@@ -80,7 +74,7 @@ export async function sendVerificationEmail(email: string, code: string) {
           </head>
           <body>
             <div class="container">
-              <h1>🚀 Welcome to Strata Systems!</h1>
+              <h1>Welcome to Strata Systems!</h1>
               <p>You're just one step away from accessing your account.</p>
               
               <div class="code-container">
@@ -92,15 +86,12 @@ export async function sendVerificationEmail(email: string, code: string) {
               <p>Enter this code in the signup form to verify your email address and complete your registration.</p>
               
               <div class="warning">
-                <strong>⚠️ Security Notice:</strong><br>
+                <strong>Security Notice:</strong><br>
                 If you didn't request this code, please ignore this email. Never share your verification code with anyone.
               </div>
               
               <div class="footer">
                 <p>© ${new Date().getFullYear()} Strata Systems. All rights reserved.</p>
-                <p style="font-size: 12px; margin-top: 10px;">
-                  Sent from: stratasystemscorp@gmail.com
-                </p>
               </div>
             </div>
           </body>
