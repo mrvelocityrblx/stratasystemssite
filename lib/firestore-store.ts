@@ -122,8 +122,13 @@ export async function isGloballyBanned(email: string): Promise<boolean> {
     const docRef = doc(db, "bans", email.toLowerCase())
     const docSnap = await getDoc(docRef)
     return docSnap.exists()
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error checking ban:", error)
+    // The ban check will happen again on login when Firestore is available
+    if (error.code === "unavailable" || error.message?.includes("offline")) {
+      console.warn("Firestore offline, skipping ban check")
+      return false
+    }
     return false
   }
 }

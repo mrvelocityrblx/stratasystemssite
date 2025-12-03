@@ -1,6 +1,4 @@
-// Email verification service using EmailJS or similar service
-// For this implementation, we'll simulate sending verification codes
-
+// Email verification service
 export interface VerificationCode {
   email: string
   code: string
@@ -63,20 +61,31 @@ export function clearVerificationCode(email: string): void {
   }
 }
 
-// Simulate sending email (in production, use a real email service)
 export async function sendVerificationEmail(email: string, code: string): Promise<boolean> {
   try {
-    // In a real implementation, you would call an API endpoint that sends the email
-    // For now, we'll just save it locally and show it in the UI
+    // Save the code locally for verification
     saveVerificationCode(email, code)
 
-    console.log(`[Email Service] Verification code for ${email}: ${code}`)
-    console.log(`From: stratasystemscorp@gmail.com`)
-    console.log(`Subject: Verify your Strata Systems account`)
+    // Call the API endpoint to send the actual email
+    const response = await fetch("/api/send-verification", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, code }),
+    })
 
+    const data = await response.json()
+
+    if (!data.success) {
+      console.error("[v0] Failed to send email:", data.message)
+      return false
+    }
+
+    console.log("[v0] Verification email sent successfully to:", email)
     return true
   } catch (error) {
-    console.error("Failed to send verification email:", error)
+    console.error("[v0] Failed to send verification email:", error)
     return false
   }
 }
