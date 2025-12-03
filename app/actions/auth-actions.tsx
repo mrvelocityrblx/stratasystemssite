@@ -2,14 +2,16 @@
 
 import { Resend } from "resend"
 
-// Initialize Resend with your API key
-const resend = new Resend("re_T7YfRniE_Pa9pAdFVzejfjcS2Ase4rZZU")
+const resend = new Resend(process.env.RESEND_API_KEY || "re_T7YfRniE_Pa9pAdFVzejfjcS2Ase4rZZU")
 
 /**
  * Send verification email with code
  */
 export async function sendVerificationEmail(email: string, code: string) {
   try {
+    console.log("[v0] Attempting to send verification email to:", email)
+    console.log("[v0] Using API key:", process.env.RESEND_API_KEY ? "from env" : "hardcoded")
+
     const { data, error } = await resend.emails.send({
       from: "Strata Systems <onboarding@resend.dev>",
       to: email,
@@ -107,15 +109,21 @@ export async function sendVerificationEmail(email: string, code: string) {
     })
 
     if (error) {
-      console.error("[v0] Resend error:", error)
-      return { success: false, error: error.message }
+      console.error("[v0] Resend API error:", error)
+      return {
+        success: false,
+        error: `Failed to send email: ${error.message || JSON.stringify(error)}`,
+      }
     }
 
-    console.log("[v0] Email sent successfully:", data)
+    console.log("[v0] Email sent successfully. ID:", data?.id)
     return { success: true, data }
   } catch (error: any) {
-    console.error("[v0] Error sending verification email:", error)
-    return { success: false, error: error.message }
+    console.error("[v0] Exception sending verification email:", error)
+    return {
+      success: false,
+      error: `Exception: ${error.message || String(error)}`,
+    }
   }
 }
 
