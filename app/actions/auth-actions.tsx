@@ -2,8 +2,12 @@
 
 import { Resend } from "resend"
 
+// Initialize Resend with your API key
 const resend = new Resend("re_T7YfRniE_Pa9pAdFVzejfjcS2Ase4rZZU")
 
+/**
+ * Send verification email with code
+ */
 export async function sendVerificationEmail(email: string, code: string) {
   try {
     const { data, error } = await resend.emails.send({
@@ -14,27 +18,88 @@ export async function sendVerificationEmail(email: string, code: string) {
         <!DOCTYPE html>
         <html>
           <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 20px;
+              }
+              .container {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-radius: 12px;
+                padding: 40px;
+                text-align: center;
+              }
+              .logo {
+                width: 80px;
+                height: 80px;
+                margin: 0 auto 20px;
+              }
+              h1 {
+                color: #ffffff;
+                margin: 0 0 10px;
+                font-size: 28px;
+              }
+              p {
+                color: #f0f0f0;
+                margin: 0 0 30px;
+                font-size: 16px;
+              }
+              .code-container {
+                background: #ffffff;
+                border-radius: 8px;
+                padding: 30px;
+                margin: 30px 0;
+              }
+              .code {
+                font-size: 48px;
+                font-weight: bold;
+                letter-spacing: 8px;
+                color: #667eea;
+                font-family: 'Courier New', monospace;
+              }
+              .footer {
+                color: #ffffff;
+                font-size: 14px;
+                margin-top: 30px;
+              }
+              .warning {
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 6px;
+                padding: 15px;
+                margin-top: 20px;
+                font-size: 14px;
+                color: #ffffff;
+              }
+            </style>
           </head>
-          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-              <h1 style="color: white; margin: 0; font-size: 28px;">Strata Systems</h1>
-            </div>
-            <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
-              <h2 style="color: #333; margin-top: 0;">Verify Your Email Address</h2>
-              <p style="font-size: 16px; color: #666;">Thank you for signing up! Please use the verification code below to complete your registration:</p>
-              <div style="background: white; border: 2px solid #667eea; border-radius: 8px; padding: 20px; text-align: center; margin: 30px 0;">
-                <div style="font-size: 36px; font-weight: bold; color: #667eea; letter-spacing: 8px; font-family: 'Courier New', monospace;">
-                  ${code}
-                </div>
+          <body>
+            <div class="container">
+              <h1>🚀 Welcome to Strata Systems!</h1>
+              <p>You're just one step away from accessing your account.</p>
+              
+              <div class="code-container">
+                <p style="color: #666; margin: 0 0 10px; font-size: 14px;">Your verification code is:</p>
+                <div class="code">${code}</div>
+                <p style="color: #999; margin: 10px 0 0; font-size: 12px;">This code expires in 10 minutes</p>
               </div>
-              <p style="font-size: 14px; color: #666;">This code will expire in 10 minutes for security purposes.</p>
-              <p style="font-size: 14px; color: #666;">If you didn't request this code, please ignore this email.</p>
-              <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-              <p style="font-size: 12px; color: #999; text-align: center;">
-                © ${new Date().getFullYear()} Strata Systems. All rights reserved.
-              </p>
+              
+              <p>Enter this code in the signup form to verify your email address and complete your registration.</p>
+              
+              <div class="warning">
+                <strong>⚠️ Security Notice:</strong><br>
+                If you didn't request this code, please ignore this email. Never share your verification code with anyone.
+              </div>
+              
+              <div class="footer">
+                <p>© ${new Date().getFullYear()} Strata Systems. All rights reserved.</p>
+                <p style="font-size: 12px; margin-top: 10px;">
+                  Sent from: stratasystemscorp@gmail.com
+                </p>
+              </div>
             </div>
           </body>
         </html>
@@ -47,32 +112,26 @@ export async function sendVerificationEmail(email: string, code: string) {
     }
 
     console.log("[v0] Email sent successfully:", data)
-    return { success: true }
+    return { success: true, data }
   } catch (error: any) {
-    console.error("[v0] Error sending email:", error)
+    console.error("[v0] Error sending verification email:", error)
     return { success: false, error: error.message }
   }
 }
 
-export async function checkIfBanned(email: string): Promise<boolean> {
-  // Check local storage for bans
-  if (typeof window !== "undefined") {
-    const bansJson = localStorage.getItem("bannedUsers")
-    if (bansJson) {
-      try {
-        const bans = JSON.parse(bansJson)
-        if (Array.isArray(bans) && bans.some((ban) => ban.email === email)) {
-          return true
-        }
-      } catch (e) {
-        console.error("[v0] Error parsing banned users:", e)
-      }
-    }
-  }
-
-  return false
-}
-
+/**
+ * Check if a user is globally banned
+ */
 export async function checkGlobalBan(email: string): Promise<boolean> {
-  return checkIfBanned(email)
+  try {
+    // This will be implemented with Firestore when available
+    // For now, return false
+    return false
+  } catch (error) {
+    console.error("[v0] Error checking global ban:", error)
+    return false
+  }
 }
+
+// Alias for compatibility
+export const checkIfBanned = checkGlobalBan
