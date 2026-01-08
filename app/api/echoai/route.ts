@@ -1,6 +1,5 @@
-import { GoogleGenerativeAI } from "@google/generative-ai"
-
-const genAI = new GoogleGenerativeAI("AIzaSyALS_BNkL4WYWlnFUy8TrsKlNwywtQ9eVs")
+import { generateText } from "ai"
+import { xai } from "@ai-sdk/xai"
 
 export async function POST(request: Request) {
   try {
@@ -9,8 +8,6 @@ export async function POST(request: Request) {
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return Response.json({ error: "Invalid messages format" }, { status: 400 })
     }
-
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" })
 
     const now = new Date()
     const dateString = now.toLocaleDateString("en-US", {
@@ -24,40 +21,23 @@ export async function POST(request: Request) {
       minute: "2-digit",
     })
 
-    const history = messages.slice(0, -1).map((msg: { role: string; content: string }) => ({
-      role: msg.role === "user" ? "user" : "model",
-      parts: [{ text: msg.content }],
-    }))
-
-    const latestMessage = messages[messages.length - 1].content
-
-    const systemContext = `You are EchoAI, a helpful AI assistant created by Strata Systems. 
+    const systemPrompt = `You are EchoAI, a helpful AI assistant created by Strata Systems. 
 Current date and time: ${dateString} at ${timeString}.
 You are knowledgeable, friendly, and helpful. When asked about the current date or time, use the information provided above.`
 
-    const chat = model.startChat({
-      history: [
-        {
-          role: "user",
-          parts: [{ text: systemContext }],
-        },
-        {
-          role: "model",
-          parts: [{ text: "Understood. I am EchoAI, ready to assist you!" }],
-        },
-        ...history,
-      ],
-      generationConfig: {
-        maxOutputTokens: 4096,
-        temperature: 0.7,
-        topP: 0.9,
-        topK: 40,
-      },
-    })
+    // Convert messages to the format expected by the AI SDK
+    const formattedMessages = messages.map((msg: { role: string; content: string }) => ({
+      role: msg.role as "user" | "assistant",
+      content: msg.content,
+    }))
 
-    const result = await chat.sendMessage(latestMessage)
-    const response = await result.response
-    const text = response.text()
+    const { text } = await generateText({
+      model: xai("grok-4", {
+        apiKey: process.env.XAI_API_KEY,
+      }),
+      system: systemPrompt,
+      messages: formattedMessages,
+    })
 
     if (!text || text.trim() === "") {
       return Response.json({

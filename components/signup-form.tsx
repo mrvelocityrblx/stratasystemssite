@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Eye, EyeOff, Loader2, Check, X, Mail } from "lucide-react"
 import Link from "next/link"
-import { auth, googleProvider, discordProvider } from "@/lib/firebase"
+import { auth, googleProvider } from "@/lib/firebase"
 import { signInWithPopup, createUserWithEmailAndPassword, updateProfile } from "firebase/auth"
 import { isUserBanned, saveUserCredential } from "@/lib/store"
 import { saveGlobalCredential, saveGlobalUser } from "@/lib/firestore-store"
@@ -201,58 +201,6 @@ export function SignupForm() {
     }
   }
 
-  const handleDiscordSignUp = async () => {
-    setError("")
-    setIsLoading(true)
-    try {
-      const result = await signInWithPopup(auth, discordProvider)
-
-      if (result.user?.email && isUserBanned(result.user.email)) {
-        await auth.signOut()
-        setError("This account has been terminated. Appeal it in our Discord.")
-        setIsLoading(false)
-        return
-      }
-
-      const globallyBanned = await checkIfBanned(result.user?.email || "")
-      if (globallyBanned) {
-        await auth.signOut()
-        setError("This account has been terminated. Appeal it in our Discord.")
-        setIsLoading(false)
-        return
-      }
-
-      if (result.user) {
-        await saveGlobalUser({
-          uid: result.user.uid,
-          email: result.user.email || "",
-          displayName: result.user.displayName || "User",
-          createdAt: new Date().toISOString(),
-          plan: "free",
-          banned: false,
-          corporateRole: null,
-        })
-      }
-
-      setIsLoggingIn(true)
-      setTimeout(() => {
-        window.location.href = "/"
-      }, 1500)
-    } catch (err: any) {
-      console.error("Discord signup error:", err)
-      if (err.code === "auth/popup-closed-by-user") {
-        setError("Sign-up cancelled")
-      } else if (err.code === "auth/unauthorized-domain") {
-        setError(
-          "This domain is not authorized. Add it to Firebase Console > Authentication > Settings > Authorized domains",
-        )
-      } else {
-        setError(`Failed to sign up with Discord: ${err.code || err.message}`)
-      }
-      setIsLoading(false)
-    }
-  }
-
   const PasswordRequirement = ({ met, text }: { met: boolean; text: string }) => (
     <div className="flex items-center gap-2 text-xs">
       {met ? <Check className="h-3 w-3 text-green-400" /> : <X className="h-3 w-3 text-muted-foreground" />}
@@ -415,13 +363,13 @@ export function SignupForm() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 w-full">
+            <div className="w-full">
               <Button
                 variant="outline"
                 type="button"
                 onClick={handleGoogleSignUp}
                 disabled={isLoading}
-                className="border-border bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                className="w-full border-border bg-secondary text-secondary-foreground hover:bg-secondary/80"
               >
                 <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
                   <path
@@ -441,20 +389,7 @@ export function SignupForm() {
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                   />
                 </svg>
-                Google
-              </Button>
-
-              <Button
-                variant="outline"
-                type="button"
-                onClick={handleDiscordSignUp}
-                disabled={isLoading}
-                className="border-border bg-[#5865F2] text-white hover:bg-[#4752C4]"
-              >
-                <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .078.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
-                </svg>
-                Discord
+                Sign up with Google
               </Button>
             </div>
 

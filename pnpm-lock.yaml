@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@ai-sdk/xai':
+        specifier: 3.0.10
+        version: 3.0.10(zod@3.25.76)
       '@google/generative-ai':
         specifier: latest
         version: 0.24.1
@@ -97,7 +100,10 @@ importers:
         version: 1.2.8(@types/react-dom@19.0.0)(@types/react@19.0.0)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       '@vercel/analytics':
         specifier: latest
-        version: 1.6.1(next@16.0.10(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react@19.2.0)(vue-router@4.6.3(vue@3.5.25(typescript@5.0.2)))(vue@3.5.25(typescript@5.0.2))
+        version: 1.6.1(next@16.0.10(@opentelemetry/api@1.9.0)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react@19.2.0)(vue-router@4.6.3(vue@3.5.25(typescript@5.0.2)))(vue@3.5.25(typescript@5.0.2))
+      ai:
+        specifier: 6.0.21
+        version: 6.0.21(zod@3.25.76)
       autoprefixer:
         specifier: ^10.4.20
         version: 10.4.20(postcss@8.5.0)
@@ -127,7 +133,7 @@ importers:
         version: 0.454.0(react@19.2.0)
       next:
         specifier: 16.0.10
-        version: 16.0.10(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+        version: 16.0.10(@opentelemetry/api@1.9.0)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       next-themes:
         specifier: 0.4.6
         version: 0.4.6(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -197,6 +203,34 @@ importers:
         version: 5.0.2
 
 packages:
+
+  '@ai-sdk/gateway@3.0.10':
+    resolution: {integrity: sha512-sRlPMKd38+fdp2y11USW44c0o8tsIsT6T/pgyY04VXC3URjIRnkxugxd9AkU2ogfpPDMz50cBAGPnMxj+6663Q==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/openai-compatible@2.0.4':
+    resolution: {integrity: sha512-kzsXyybJKM3wtUtGZkNbvmpDwqpsvg/hTjlPZe3s/bCx3enVdAlRtXD853nnj6mZjteNCDLoR2OgVLuDpyRN5Q==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/provider-utils@4.0.4':
+    resolution: {integrity: sha512-VxhX0B/dWGbpNHxrKCWUAJKXIXV015J4e7qYjdIU9lLWeptk0KMLGcqkB4wFxff5Njqur8dt8wRi1MN9lZtDqg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/provider@3.0.2':
+    resolution: {integrity: sha512-HrEmNt/BH/hkQ7zpi2o6N3k1ZR1QTb7z85WYhYygiTxOQuaml4CMtHCWRbric5WPU+RNsYI7r1EpyVQMKO1pYw==}
+    engines: {node: '>=18'}
+
+  '@ai-sdk/xai@3.0.10':
+    resolution: {integrity: sha512-36Uf1/aALU1pZkyiCh6DkOqcy7GNmFXg3PRDyWT2K/w4cgRh8cEAOy4P9o47KM35F2PAHPGIqv5y2K791yWBdg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
 
   '@alloc/quick-lru@5.2.0':
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
@@ -683,6 +717,10 @@ packages:
 
   '@one-ini/wasm@0.1.1':
     resolution: {integrity: sha512-XuySG1E38YScSJoMlqovLru4KTUNSjgVTIjyh7qMX6aNN5HY5Ct5LhRJdxO79JtTzKfzV/bnWpz+zquYrISsvw==}
+
+  '@opentelemetry/api@1.9.0':
+    resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
+    engines: {node: '>=8.0.0'}
 
   '@pkgjs/parseargs@0.11.0':
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
@@ -1398,6 +1436,9 @@ packages:
   '@standard-schema/spec@1.0.0':
     resolution: {integrity: sha512-m2bOd0f2RT9k8QJx1JN85cZYyH1RqFBdlwtkSlf4tBDYLCiiZnv1fIIwacK6cqwXavOydf0NPToMQgpKq+dVlA==}
 
+  '@standard-schema/spec@1.1.0':
+    resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
   '@standard-schema/utils@0.3.0':
     resolution: {integrity: sha512-e7Mew686owMaPJVNNLs55PUvgz371nKgwsc4vxE49zsODpJEnxgxRo2y/OKrqueavXgZNMDVj3DdHFlaSAeU8g==}
 
@@ -1560,6 +1601,10 @@ packages:
       vue-router:
         optional: true
 
+  '@vercel/oidc@3.1.0':
+    resolution: {integrity: sha512-Fw28YZpRnA3cAHHDlkt7xQHiJ0fcL+NRcIqsocZQUSmbzeIKRpwttJjik5ZGanXP+vlA4SbTg+AbA3bP363l+w==}
+    engines: {node: '>= 20'}
+
   '@vue/compiler-core@3.5.25':
     resolution: {integrity: sha512-vay5/oQJdsNHmliWoZfHPoVZZRmnSWhug0BYT34njkYTPqClh3DNWLkZNJBVSjsNMrg0CCrBfoKkjZQPM/QVUw==}
 
@@ -1595,6 +1640,12 @@ packages:
   abbrev@2.0.0:
     resolution: {integrity: sha512-6/mh1E2u2YgEsCHdY0Yx5oW+61gZU+1vXaoiHHrpKeuRNNgFvS+/jrwHiQhB5apAf5oB7UB7E19ol2R2LKH8hQ==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
+
+  ai@6.0.21:
+    resolution: {integrity: sha512-OUjgowbvEY2DsXJwq3guQ95gXuTg9B84DO7QpGcXVjd6C+9f08CXxHh4UuYjBnYDtuv27rQuegjKJuWILxT0GA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
 
   ansi-regex@5.0.1:
     resolution: {integrity: sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==}
@@ -1814,6 +1865,10 @@ packages:
   eventemitter3@5.0.1:
     resolution: {integrity: sha512-GWkBvjiSZK87ELrYOSESUYeVIc9mvLLf/nXalMOS5dYrgZq9o5OVkbZAVM06CVxYsCwH9BDZFPlQTlPA1j4ahA==}
 
+  eventsource-parser@3.0.6:
+    resolution: {integrity: sha512-Vo1ab+QXPzZ4tCa8SwIHJFaSzy4R6SHf7BY79rFBDf0idraZWAkYrDjDj8uWaSm3S2TK+hJ7/t1CEmZ7jXw+pg==}
+    engines: {node: '>=18.0.0'}
+
   fast-deep-equal@2.0.1:
     resolution: {integrity: sha512-bCK/2Z4zLidyB4ReuIsvALH6w31YfAQDmXMqMx6FyfHqvBxtjC0eRumeSu4Bs3XtXwpyIywtSTrVT99BxY1f9w==}
 
@@ -1900,6 +1955,9 @@ packages:
   js-cookie@3.0.5:
     resolution: {integrity: sha512-cEiJEAEoIbWfCZYKWhVwFuvPX1gETRYPw6LlaTKoxD3s2AkXzkCjnp6h0V77ozyqj0jakteJ4YqDJT830+lVGw==}
     engines: {node: '>=14'}
+
+  json-schema@0.4.0:
+    resolution: {integrity: sha512-es94M3nTIfsEPisRafak+HDLfHXnKBhV3vU5eqPcS3flIWqcxJWgXHXiey3YrpaNsanY5ei1VoYEbOzijuq9BA==}
 
   leac@0.6.0:
     resolution: {integrity: sha512-y+SqErxb8h7nE/fiEX07jsbuhrpO9lL8eca7/Y1nuWV2moNlXhyd59iDGcRf6moVyDMbmTNzL40SUyrFU/yDpg==}
@@ -2398,6 +2456,37 @@ packages:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
 snapshots:
+
+  '@ai-sdk/gateway@3.0.10(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.2
+      '@ai-sdk/provider-utils': 4.0.4(zod@3.25.76)
+      '@vercel/oidc': 3.1.0
+      zod: 3.25.76
+
+  '@ai-sdk/openai-compatible@2.0.4(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.2
+      '@ai-sdk/provider-utils': 4.0.4(zod@3.25.76)
+      zod: 3.25.76
+
+  '@ai-sdk/provider-utils@4.0.4(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.2
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.0.6
+      zod: 3.25.76
+
+  '@ai-sdk/provider@3.0.2':
+    dependencies:
+      json-schema: 0.4.0
+
+  '@ai-sdk/xai@3.0.10(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/openai-compatible': 2.0.4(zod@3.25.76)
+      '@ai-sdk/provider': 3.0.2
+      '@ai-sdk/provider-utils': 4.0.4(zod@3.25.76)
+      zod: 3.25.76
 
   '@alloc/quick-lru@5.2.0': {}
 
@@ -2934,6 +3023,8 @@ snapshots:
     optional: true
 
   '@one-ini/wasm@0.1.1': {}
+
+  '@opentelemetry/api@1.9.0': {}
 
   '@pkgjs/parseargs@0.11.0':
     optional: true
@@ -3683,6 +3774,8 @@ snapshots:
 
   '@standard-schema/spec@1.0.0': {}
 
+  '@standard-schema/spec@1.1.0': {}
+
   '@standard-schema/utils@0.3.0': {}
 
   '@swc/helpers@0.5.15':
@@ -3803,12 +3896,14 @@ snapshots:
 
   '@types/use-sync-external-store@0.0.6': {}
 
-  '@vercel/analytics@1.6.1(next@16.0.10(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react@19.2.0)(vue-router@4.6.3(vue@3.5.25(typescript@5.0.2)))(vue@3.5.25(typescript@5.0.2))':
+  '@vercel/analytics@1.6.1(next@16.0.10(@opentelemetry/api@1.9.0)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react@19.2.0)(vue-router@4.6.3(vue@3.5.25(typescript@5.0.2)))(vue@3.5.25(typescript@5.0.2))':
     optionalDependencies:
-      next: 16.0.10(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      next: 16.0.10(@opentelemetry/api@1.9.0)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       react: 19.2.0
       vue: 3.5.25(typescript@5.0.2)
       vue-router: 4.6.3(vue@3.5.25(typescript@5.0.2))
+
+  '@vercel/oidc@3.1.0': {}
 
   '@vue/compiler-core@3.5.25':
     dependencies:
@@ -3877,6 +3972,14 @@ snapshots:
     optional: true
 
   abbrev@2.0.0: {}
+
+  ai@6.0.21(zod@3.25.76):
+    dependencies:
+      '@ai-sdk/gateway': 3.0.10(zod@3.25.76)
+      '@ai-sdk/provider': 3.0.2
+      '@ai-sdk/provider-utils': 4.0.4(zod@3.25.76)
+      '@opentelemetry/api': 1.9.0
+      zod: 3.25.76
 
   ansi-regex@5.0.1: {}
 
@@ -4080,6 +4183,8 @@ snapshots:
 
   eventemitter3@5.0.1: {}
 
+  eventsource-parser@3.0.6: {}
+
   fast-deep-equal@2.0.1: {}
 
   faye-websocket@0.11.4:
@@ -4195,6 +4300,8 @@ snapshots:
 
   js-cookie@3.0.5: {}
 
+  json-schema@0.4.0: {}
+
   leac@0.6.0: {}
 
   lightningcss-darwin-arm64@1.30.1:
@@ -4277,7 +4384,7 @@ snapshots:
       react: 19.2.0
       react-dom: 19.2.0(react@19.2.0)
 
-  next@16.0.10(react-dom@19.2.0(react@19.2.0))(react@19.2.0):
+  next@16.0.10(@opentelemetry/api@1.9.0)(react-dom@19.2.0(react@19.2.0))(react@19.2.0):
     dependencies:
       '@next/env': 16.0.10
       '@swc/helpers': 0.5.15
@@ -4295,6 +4402,7 @@ snapshots:
       '@next/swc-linux-x64-musl': 16.0.10
       '@next/swc-win32-arm64-msvc': 16.0.10
       '@next/swc-win32-x64-msvc': 16.0.10
+      '@opentelemetry/api': 1.9.0
       sharp: 0.34.5
     transitivePeerDependencies:
       - '@babel/core'

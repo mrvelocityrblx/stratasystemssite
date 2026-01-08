@@ -9,6 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Settings, LogOut, MessageSquare, Calendar, Shield, Crown, Home } from "lucide-react"
 import { canAccessAdminPanel } from "@/lib/store"
+import { Badge } from "@/components/ui/badge"
+
+const OWNER_EMAIL = "stratasystemscorp@gmail.com"
 
 export default function DashboardPage() {
   const {
@@ -60,6 +63,8 @@ export default function DashboardPage() {
     return "per month"
   }
 
+  const isOwner = user?.email?.toLowerCase() === OWNER_EMAIL.toLowerCase()
+
   // Check if user can access admin panel
   const hasAdminPanelAccess = canAccessAdminPanel(user?.email || null)
 
@@ -104,8 +109,14 @@ export default function DashboardPage() {
           {/* Welcome Card */}
           <Card className="mb-8 border-border bg-card">
             <CardHeader>
-              <CardTitle className="text-2xl text-card-foreground">
+              <CardTitle className="text-2xl text-card-foreground flex items-center gap-2 flex-wrap">
                 Welcome, {user.displayName || user.email}!
+                {isOwner && (
+                  <Badge className="bg-gradient-to-r from-yellow-500 to-amber-500 text-white border-0">
+                    <Crown className="h-3 w-3 mr-1" />
+                    Owner
+                  </Badge>
+                )}
               </CardTitle>
               <CardDescription>Manage your account and access Strata Systems products</CardDescription>
             </CardHeader>

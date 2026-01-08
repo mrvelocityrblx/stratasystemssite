@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from "firebase/app"
-import { getAuth, GoogleAuthProvider, OAuthProvider } from "firebase/auth"
+import { getAuth, GoogleAuthProvider } from "firebase/auth"
 import { getFirestore } from "firebase/firestore"
 
 const firebaseConfig = {
@@ -22,18 +22,8 @@ export const googleProvider = new GoogleAuthProvider()
 googleProvider.addScope("profile")
 googleProvider.addScope("email")
 
-export const discordProvider = new OAuthProvider("oidc.discord")
-discordProvider.setCustomParameters({
-  prompt: "consent",
-})
-
-// Note: To enable Google and Discord sign-in:
+// Note: To enable Google sign-in:
 // 1. Go to Firebase Console > Authentication > Sign-in method
 // 2. Enable "Google" provider
-// 3. Enable "OpenID Connect (OIDC)" provider for Discord
-//    - Provider name: Discord
-//    - Client ID: (Get from Discord Developer Portal)
-//    - Client secret: (Get from Discord Developer Portal)
-//    - Issuer: https://discord.com
-// 4. Under "Authorized domains", add: stratasystems.vercel.app
-// 5. This allows OAuth redirects from your custom domain
+// 3. Under "Authorized domains", add: stratasystems.vercel.app
+// 4. This allows OAuth redirects from your custom domain
