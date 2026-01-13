@@ -227,7 +227,7 @@ export function Header() {
                   <User className="h-6 w-6 text-accent" />
                 </div>
                 <div>
-                  <p className="font-medium text-foreground">Velocity</p>
+                  <p className="font-medium text-foreground">Clay Worley</p>
                   <p className="text-sm text-muted-foreground">Chief Executive Officer</p>
                 </div>
               </div>
@@ -239,7 +239,7 @@ export function Header() {
                   <User className="h-6 w-6 text-accent" />
                 </div>
                 <div>
-                  <p className="font-medium text-foreground">Bhulux</p>
+                  <p className="font-medium text-foreground">Placeholder</p>
                   <p className="text-sm text-muted-foreground">Chief Operating Officer</p>
                 </div>
               </div>
@@ -252,7 +252,7 @@ export function Header() {
                     <User className="h-6 w-6 text-accent" />
                   </div>
                   <div>
-                    <p className="font-medium text-foreground">Lucas</p>
+                    <p className="font-medium text-foreground">Placeholder</p>
                     <p className="text-sm text-muted-foreground">Chief Technology Officer</p>
                   </div>
                 </div>
@@ -261,7 +261,7 @@ export function Header() {
                     <User className="h-6 w-6 text-accent" />
                   </div>
                   <div>
-                    <p className="font-medium text-foreground">Tyler</p>
+                    <p className="font-medium text-foreground">Placeholder</p>
                     <p className="text-sm text-muted-foreground">Chief Technology Officer</p>
                   </div>
                 </div>
