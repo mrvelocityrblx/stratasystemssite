@@ -1,4 +1,4 @@
-// Data store for user accounts, admin logs, and generation tracking
+// Data store for user accounts, admin logs, generation tracking
 // Uses localStorage to persist data across sessions
 
 export type SubscriptionPlan = "free" | "starter" | "pro"
@@ -126,6 +126,13 @@ export interface SupportResponse {
   isStaff: boolean
 }
 
+export interface SiteSettings {
+  aiEnabled: boolean
+  maintenanceMode: boolean
+  updatedAt: string
+  updatedBy: string
+}
+
 interface Store {
   users: Record<string, UserAccount>
   adminLogs: AdminLog[]
@@ -133,6 +140,8 @@ interface Store {
   credentials: UserCredential[]
   chatMessages: ChatMessage[]
   supportTickets: SupportTicket[]
+  // Added site settings to the store
+  siteSettings: SiteSettings
 }
 
 const ADMIN_ACCOUNTS = [
@@ -158,6 +167,7 @@ const BANNED_EMAILS_KEY = "strata_banned_emails"
 const USER_CREDENTIALS_KEY = "strata_user_credentials"
 const FORCE_ACCESS_KEY = "strata_force_access"
 const SUPPORT_TICKETS_KEY = "strata_support_tickets"
+const SITE_SETTINGS_KEY = "strata_site_settings"
 
 const CHAT_FILTER_WORDS = [
   "fuck",
@@ -198,6 +208,7 @@ function getStore() {
       credentials: [] as UserCredential[],
       chatMessages: [] as ChatMessage[],
       supportTickets: [] as SupportTicket[],
+      siteSettings: { aiEnabled: true, maintenanceMode: false, updatedAt: "", updatedBy: "" }, // Initialize site settings
     }
     localStorage.setItem("strata_store", JSON.stringify(initialStore))
     return initialStore
@@ -211,6 +222,9 @@ function getStore() {
   if (!parsed.credentials) parsed.credentials = []
   if (!parsed.chatMessages) parsed.chatMessages = []
   if (!parsed.supportTickets) parsed.supportTickets = []
+  // Ensure site settings exist
+  if (!parsed.siteSettings)
+    parsed.siteSettings = { aiEnabled: true, maintenanceMode: false, updatedAt: "", updatedBy: "" }
   return parsed
 }
 
@@ -1270,6 +1284,53 @@ export function canAccessSupport(email: string | null): boolean {
 
 export function assignUserRole(email: string, role: CorporateRole, assignedBy: string): boolean {
   return setCorporateRole(email, role, assignedBy)
+}
+
+export function getSiteSettings(): SiteSettings {
+  if (typeof window === "undefined") {
+    return { aiEnabled: true, maintenanceMode: false, updatedAt: "", updatedBy: "" }
+  }
+  const data = localStorage.getItem(SITE_SETTINGS_KEY)
+  if (!data) {
+    return { aiEnabled: true, maintenanceMode: false, updatedAt: "", updatedBy: "" }
+  }
+  return JSON.parse(data)
+}
+
+export function setSiteSettings(settings: Partial<SiteSettings>, updatedBy: string): boolean {
+  if (typeof window === "undefined") return false
+
+  const current = getSiteSettings()
+  const updated: SiteSettings = {
+    ...current,
+    ...settings,
+    updatedAt: new Date().toISOString(),
+    updatedBy,
+  }
+  localStorage.setItem(SITE_SETTINGS_KEY, JSON.stringify(updated))
+
+  // Log the change
+  const store = getStore()
+  if (store) {
+    store.adminLogs.unshift({
+      id: Date.now().toString(),
+      type: "role_change",
+      email: updatedBy,
+      timestamp: new Date().toISOString(),
+      details: `Site settings updated: AI ${updated.aiEnabled ? "enabled" : "disabled"}, Maintenance ${updated.maintenanceMode ? "enabled" : "disabled"}`,
+    })
+    saveStore(store)
+  }
+
+  return true
+}
+
+export function isAIEnabled(): boolean {
+  return getSiteSettings().aiEnabled
+}
+
+export function isMaintenanceMode(): boolean {
+  return getSiteSettings().maintenanceMode
 }
 
 export { ADMIN_ACCOUNTS, PLAN_LIMITS, IMAGE_LIMITS, CORPORATE_STAFF_GENERATIONS, CHAT_FILTER_WORDS }

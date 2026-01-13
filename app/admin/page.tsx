@@ -11,6 +11,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 import {
   ArrowLeft,
   Shield,
@@ -35,6 +37,9 @@ import {
   ShieldCheck,
   Headset,
   Send,
+  Power,
+  Wrench,
+  Bot,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
@@ -66,6 +71,9 @@ import {
   addTicketResponse,
   canAccessSupport,
   assignUserRole,
+  getSiteSettings,
+  setSiteSettings,
+  getCorporateRole,
   type UserAccount,
   type AdminLog,
   type RoleRequest,
@@ -110,10 +118,13 @@ export default function AdminPage() {
   const [assignRoleEmail, setAssignRoleEmail] = useState("")
   const [assignRoleType, setAssignRoleType] = useState<CorporateRole>("support_team")
   const [isLoadingGlobal, setIsLoadingGlobal] = useState(true)
+  const [aiEnabled, setAiEnabled] = useState(true)
+  const [maintenanceMode, setMaintenanceMode] = useState(false)
 
   const isOwner = isCorporateAccount(user?.email || null)
   const hasAccess = canAccessAdminPanel(user?.email || null)
   const canViewSupport = canAccessSupport(user?.email || null)
+  const isDeveloper = isOwner || getCorporateRole(user?.email || null) === "corporate_developer"
 
   useEffect(() => {
     if (!loading && !user) {
@@ -130,6 +141,12 @@ export default function AdminPage() {
       refreshData()
     }
   }, [hasAccess])
+
+  useEffect(() => {
+    const settings = getSiteSettings()
+    setAiEnabled(settings.aiEnabled)
+    setMaintenanceMode(settings.maintenanceMode)
+  }, [])
 
   const refreshData = async () => {
     setUsers(getAllUsers())
@@ -376,6 +393,26 @@ export default function AdminPage() {
     } else {
       setMessage({ type: "error", text: "Failed to assign role" })
     }
+    setTimeout(() => setMessage(null), 3000)
+  }
+
+  const handleToggleAI = (enabled: boolean) => {
+    setAiEnabled(enabled)
+    setSiteSettings({ aiEnabled: enabled }, user?.email || "admin")
+    setMessage({
+      type: "success",
+      text: `AI has been ${enabled ? "enabled" : "disabled"}`,
+    })
+    setTimeout(() => setMessage(null), 3000)
+  }
+
+  const handleToggleMaintenance = (enabled: boolean) => {
+    setMaintenanceMode(enabled)
+    setSiteSettings({ maintenanceMode: enabled }, user?.email || "admin")
+    setMessage({
+      type: "success",
+      text: `Maintenance mode has been ${enabled ? "enabled" : "disabled"}`,
+    })
     setTimeout(() => setMessage(null), 3000)
   }
 
@@ -633,7 +670,7 @@ export default function AdminPage() {
         </div>
 
         <Tabs defaultValue="users" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 bg-secondary border border-border">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 bg-secondary border border-border">
             <TabsTrigger value="users" className="text-foreground data-[state=active]:bg-card">
               <Users className="h-4 w-4 mr-2" />
               Users
@@ -660,6 +697,12 @@ export default function AdminPage() {
               <TabsTrigger value="support" className="text-foreground data-[state=active]:bg-card">
                 <Headset className="h-4 w-4 mr-2" />
                 Support
+              </TabsTrigger>
+            )}
+            {isDeveloper && (
+              <TabsTrigger value="developer" className="text-foreground data-[state=active]:bg-card">
+                <Wrench className="h-4 w-4 mr-2" />
+                Developer
               </TabsTrigger>
             )}
             {isOwner && (
@@ -1297,6 +1340,119 @@ export default function AdminPage() {
                         )}
                       </ScrollArea>
                     )}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {isDeveloper && (
+            <TabsContent value="developer">
+              <Card className="border-border bg-card">
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Wrench className="h-5 w-5 text-accent" />
+                    <CardTitle className="text-card-foreground">Developer Controls</CardTitle>
+                  </div>
+                  <CardDescription>Manage site-wide settings and controls</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* AI Toggle */}
+                  <div className="p-6 rounded-lg border border-border bg-secondary/20">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className={`p-3 rounded-lg ${aiEnabled ? "bg-green-500/10" : "bg-red-500/10"}`}>
+                          <Bot className={`h-6 w-6 ${aiEnabled ? "text-green-500" : "text-red-500"}`} />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-foreground">AI Service</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {aiEnabled
+                              ? "EchoAI is currently enabled and accepting requests"
+                              : "EchoAI is disabled - users will see a maintenance message"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Label htmlFor="ai-toggle" className="text-sm text-muted-foreground">
+                          {aiEnabled ? "Enabled" : "Disabled"}
+                        </Label>
+                        <Switch id="ai-toggle" checked={aiEnabled} onCheckedChange={handleToggleAI} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Maintenance Mode Toggle */}
+                  <div className="p-6 rounded-lg border border-border bg-secondary/20">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className={`p-3 rounded-lg ${maintenanceMode ? "bg-yellow-500/10" : "bg-green-500/10"}`}>
+                          <Power className={`h-6 w-6 ${maintenanceMode ? "text-yellow-500" : "text-green-500"}`} />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-foreground">Maintenance Mode</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {maintenanceMode
+                              ? "Site is in maintenance mode - only developers can access"
+                              : "Site is live and accessible to all users"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Label htmlFor="maintenance-toggle" className="text-sm text-muted-foreground">
+                          {maintenanceMode ? "Active" : "Inactive"}
+                        </Label>
+                        <Switch
+                          id="maintenance-toggle"
+                          checked={maintenanceMode}
+                          onCheckedChange={handleToggleMaintenance}
+                        />
+                      </div>
+                    </div>
+                    {maintenanceMode && (
+                      <div className="mt-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                        <div className="flex items-center gap-2 text-yellow-500">
+                          <AlertTriangle className="h-4 w-4" />
+                          <span className="text-sm font-medium">
+                            Warning: Users will see a maintenance page and cannot access the site
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Status Summary */}
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="p-4 rounded-lg border border-border bg-card">
+                      <div className="flex items-center gap-3 mb-2">
+                        <Bot className={`h-5 w-5 ${aiEnabled ? "text-green-500" : "text-red-500"}`} />
+                        <span className="font-medium text-foreground">AI Status</span>
+                      </div>
+                      <Badge
+                        className={
+                          aiEnabled
+                            ? "bg-green-500/20 text-green-500 border-green-500/30"
+                            : "bg-red-500/20 text-red-500 border-red-500/30"
+                        }
+                      >
+                        {aiEnabled ? "Online" : "Offline"}
+                      </Badge>
+                    </div>
+                    <div className="p-4 rounded-lg border border-border bg-card">
+                      <div className="flex items-center gap-3 mb-2">
+                        <Power className={`h-5 w-5 ${maintenanceMode ? "text-yellow-500" : "text-green-500"}`} />
+                        <span className="font-medium text-foreground">Site Status</span>
+                      </div>
+                      <Badge
+                        className={
+                          maintenanceMode
+                            ? "bg-yellow-500/20 text-yellow-500 border-yellow-500/30"
+                            : "bg-green-500/20 text-green-500 border-green-500/30"
+                        }
+                      >
+                        {maintenanceMode ? "Maintenance" : "Live"}
+                      </Badge>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

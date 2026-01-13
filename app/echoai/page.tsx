@@ -25,6 +25,7 @@ import {
   Plus,
   MessageSquare,
   X,
+  Power,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -35,6 +36,7 @@ import {
   getChatSessions,
   saveChatSession,
   deleteChatSession,
+  isAIEnabled,
   type ChatSession,
 } from "@/lib/store"
 
@@ -53,6 +55,7 @@ export default function EchoAIPage() {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([])
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  const [aiEnabled, setAiEnabled] = useState(true)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const { user, userAccount, loading, isAdmin, subscriptionActive, refreshGenerations } = useAuth()
@@ -71,6 +74,15 @@ export default function EchoAIPage() {
       setChatSessions(getChatSessions(user.uid))
     }
   }, [user, userAccount])
+
+  useEffect(() => {
+    const checkAI = () => {
+      setAiEnabled(isAIEnabled())
+    }
+    checkAI()
+    const interval = setInterval(checkAI, 3000)
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -120,6 +132,17 @@ export default function EchoAIPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isLoading || !user) return
+
+    if (!aiEnabled) {
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: "Our AI Application Has Been Turned Off - Strata Systems Development",
+      }
+      setMessages((prev) => [...prev, errorMessage])
+      setInput("")
+      return
+    }
 
     if (limit !== Number.POSITIVE_INFINITY && generationsLeft <= 0) {
       const errorMessage: Message = {
@@ -231,7 +254,6 @@ export default function EchoAIPage() {
   ]
 
   const renderMessageContent = (content: string) => {
-    // Handle bold text
     const parts = content.split(/(\*\*.*?\*\*)/g)
     return parts.map((part, index) => {
       if (part.startsWith("**") && part.endsWith("**")) {
@@ -260,9 +282,66 @@ export default function EchoAIPage() {
   const isLimitReached = limit !== Number.POSITIVE_INFINITY && generationsLeft <= 0
   const isLowGenerations = limit !== Number.POSITIVE_INFINITY && generationsLeft <= 100 && generationsLeft > 0
 
+  if (!aiEnabled) {
+    return (
+      <main className="min-h-screen bg-background flex flex-col">
+        <header className="border-b border-border bg-card sticky top-0 z-10">
+          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
+                <ArrowLeft className="h-5 w-5" />
+              </Link>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-accent/10">
+                  <Bot className="h-6 w-6 text-accent" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-foreground">EchoAI</h1>
+                  <p className="text-xs text-muted-foreground">Conversational AI Assistant</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link href="/">
+                <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
+                  <Home className="h-5 w-5" />
+                </Button>
+              </Link>
+              <ThemeToggle />
+              <Link href="/">
+                <Image
+                  src="/images/strata-logo.png"
+                  alt="Strata Systems Logo"
+                  width={36}
+                  height={36}
+                  className="object-contain"
+                />
+              </Link>
+            </div>
+          </div>
+        </header>
+
+        <div className="flex-1 flex flex-col items-center justify-center p-4">
+          <div className="text-center">
+            <div className="p-6 rounded-full bg-red-500/10 mb-6 inline-block">
+              <Power className="h-16 w-16 text-red-500" />
+            </div>
+            <h2 className="text-2xl font-bold text-foreground mb-4">Our AI Application Has Been Turned Off</h2>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              The AI service is currently unavailable. Please check back later.
+            </p>
+            <p className="text-muted-foreground text-sm mt-4">- Strata Systems Development</p>
+            <Link href="/dashboard">
+              <Button className="mt-6 bg-accent text-accent-foreground hover:bg-accent/90">Return to Dashboard</Button>
+            </Link>
+          </div>
+        </div>
+      </main>
+    )
+  }
+
   return (
     <main className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
       <header className="border-b border-border bg-card sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -290,7 +369,6 @@ export default function EchoAIPage() {
               <Sparkles className="h-4 w-4 text-accent" />
               <span className="text-sm font-medium text-accent">{formatGenerations()} left</span>
             </div>
-            {/* History button */}
             <Button
               variant="ghost"
               size="icon"
@@ -346,9 +424,7 @@ export default function EchoAIPage() {
         </div>
       )}
 
-      {/* Main content with history sidebar */}
       <div className="flex-1 flex">
-        {/* History Sidebar */}
         {showHistory && (
           <div className="w-72 border-r border-border bg-card flex flex-col">
             <div className="p-4 border-b border-border flex items-center justify-between">
@@ -391,7 +467,6 @@ export default function EchoAIPage() {
           </div>
         )}
 
-        {/* Chat Area */}
         <div className="flex-1 flex flex-col container mx-auto max-w-4xl px-4">
           <ScrollArea ref={scrollAreaRef} className="flex-1 py-4">
             {messages.length === 0 ? (
@@ -468,7 +543,6 @@ export default function EchoAIPage() {
             )}
           </ScrollArea>
 
-          {/* Input Area */}
           <div className="py-4 border-t border-border">
             <form onSubmit={handleSubmit} className="flex gap-3">
               <Input
