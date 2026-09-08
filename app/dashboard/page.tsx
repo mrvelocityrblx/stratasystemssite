@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Settings, LogOut, MessageSquare, Calendar, Shield, Crown, Home } from "lucide-react"
-import { canAccessAdminPanel } from "@/lib/store"
 import { Badge } from "@/components/ui/badge"
 
 const OWNER_EMAIL = "stratasystemscorp@gmail.com"
@@ -64,9 +63,6 @@ export default function DashboardPage() {
   }
 
   const isOwner = user?.email?.toLowerCase() === OWNER_EMAIL.toLowerCase()
-
-  // Check if user can access admin panel
-  const hasAdminPanelAccess = canAccessAdminPanel(user?.email || null)
 
   if (loading) {
     return (
@@ -203,27 +199,6 @@ export default function DashboardPage() {
               </Card>
             </Link>
 
-            {/* Admin Panel - Only show if user has access */}
-            {hasAdminPanelAccess && (
-              <Link href="/admin">
-                <Card className="border-border bg-card hover:bg-secondary/50 transition-colors cursor-pointer h-full border-yellow-500/30">
-                  <CardContent className="pt-6">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 rounded-lg bg-yellow-500/10">
-                        <Shield className="h-6 w-6 text-yellow-500" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-card-foreground flex items-center gap-2">
-                          Admin Panel
-                          <Crown className="h-4 w-4 text-yellow-500" />
-                        </h3>
-                        <p className="text-sm text-muted-foreground">Manage users and system</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            )}
           </div>
         </div>
       </div>

@@ -21,21 +21,18 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useAuth } from "@/lib/auth-context"
-import { auth } from "@/lib/firebase"
-import { signOut } from "firebase/auth"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 
 export function Header() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [teamModalOpen, setTeamModalOpen] = useState(false)
   const [showTeamDialog, setShowTeamDialog] = useState(false)
-  const { user, userAccount, isAdmin, remainingGenerations, monthlyLimit, subscriptionActive, corporateRole } =
-    useAuth()
+  const { user, userAccount, remainingGenerations, monthlyLimit, subscriptionActive, signOut } = useAuth()
   const router = useRouter()
 
   const handleSignOut = async () => {
-    await signOut(auth)
+    await signOut()
+    router.push("/")
   }
 
   const formatGenerations = () => {
