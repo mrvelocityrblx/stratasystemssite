@@ -4,12 +4,12 @@ import { isUserBanned, saveUser } from "@/lib/store"
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
-  const origin = process.env.NEXT_PUBLIC_APP_URL || url.origin
+  const origin = url.origin
   const code = url.searchParams.get("code")
   const state = url.searchParams.get("state")
   if (!code || !state || !(await consumeOAuthState(state))) return NextResponse.redirect(new URL("/login?error=oauth-state", origin))
   try {
-    const user = await exchangeGoogleCode(code)
+    const user = await exchangeGoogleCode(code, url.origin)
     if (isUserBanned(user.email)) return NextResponse.redirect(new URL("/login?error=banned", origin))
     await setSession(user)
     saveUser({ uid: user.uid, email: user.email, displayName: user.displayName })
