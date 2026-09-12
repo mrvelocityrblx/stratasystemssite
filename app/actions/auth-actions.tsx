@@ -2,7 +2,7 @@
 
 import { Resend } from "resend"
 
-const resend = new Resend("re_T7YfRniE_Pa9pAdFVzejfjcS2Ase4rZZU")
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 /**
  * Send verification email with code

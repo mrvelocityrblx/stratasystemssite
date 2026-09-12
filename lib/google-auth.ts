@@ -10,18 +10,14 @@ export interface GoogleAuthUser {
 const SESSION_COOKIE = "strata_google_session"
 const STATE_COOKIE = "strata_google_oauth_state"
 
-function getBaseUrl() {
-  return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+export function getGoogleCallbackUrl(baseUrl: string) {
+  return `${baseUrl.replace(/\/$/, "")}/api/auth/google/callback`
 }
 
-export function getGoogleCallbackUrl() {
-  return `${getBaseUrl()}/api/auth/google/callback`
-}
-
-export function getGoogleAuthorizationUrl(state: string) {
+export function getGoogleAuthorizationUrl(state: string, baseUrl: string) {
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID || "",
-    redirect_uri: getGoogleCallbackUrl(),
+    redirect_uri: getGoogleCallbackUrl(baseUrl),
     response_type: "code",
     scope: "openid email profile",
     access_type: "offline",
@@ -45,7 +41,7 @@ export async function consumeOAuthState(state: string) {
   return Boolean(savedState && state && savedState === state)
 }
 
-export async function exchangeGoogleCode(code: string): Promise<GoogleAuthUser> {
+export async function exchangeGoogleCode(code: string, baseUrl: string): Promise<GoogleAuthUser> {
   const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -53,7 +49,7 @@ export async function exchangeGoogleCode(code: string): Promise<GoogleAuthUser> 
       code,
       client_id: process.env.GOOGLE_CLIENT_ID || "",
       client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
-      redirect_uri: getGoogleCallbackUrl(),
+    redirect_uri: getGoogleCallbackUrl(baseUrl),
       grant_type: "authorization_code",
     }),
   })
