@@ -2,10 +2,23 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Loader2, Sparkles } from "lucide-react"
+import { AlertCircle, Loader2, Sparkles } from "lucide-react"
 
 export function SignupForm() {
+  const [displayName, setDisplayName] = useState("")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
-  return <Card className="border-border bg-card shadow-2xl shadow-black/20"><CardHeader className="space-y-3"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/10 text-accent"><Sparkles className="h-6 w-6" /></div><CardTitle className="text-2xl text-card-foreground">Create your account</CardTitle><CardDescription>Start with Google. No password to remember, and your account stays protected by Google.</CardDescription></CardHeader><CardContent className="space-y-5"><Button className="h-12 w-full bg-accent text-accent-foreground hover:bg-accent/90" disabled={loading} onClick={() => { setLoading(true); window.location.href = "/api/auth/google" }}>{loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Connecting to Google...</> : "Sign up with Google"}</Button><p className="text-center text-xs leading-relaxed text-muted-foreground">Your Google profile name and verified email will be used to create your account.</p></CardContent></Card>
+  const submit = async () => {
+    setLoading(true)
+    setError("")
+    const response = await fetch("/api/auth/credentials", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "signup", displayName, email, password }) })
+    const data = await response.json()
+    if (!response.ok) { setError(data.error || "Unable to create your account."); setLoading(false); return }
+    window.location.href = "/dashboard"
+  }
+  return <Card className="border-border bg-card shadow-2xl shadow-black/20"><CardHeader className="space-y-3"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/10 text-accent"><Sparkles className="h-6 w-6" /></div><CardTitle className="text-2xl text-card-foreground">Create your account</CardTitle><CardDescription>Choose a username, email, and password to get started.</CardDescription></CardHeader><CardContent className="space-y-4">{error && <div className="flex gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"><AlertCircle className="h-4 w-4 shrink-0" />{error}</div>}<Input placeholder="Username" value={displayName} onChange={(event) => setDisplayName(event.target.value)} /><Input type="email" placeholder="Email address" value={email} onChange={(event) => setEmail(event.target.value)} /><Input type="password" placeholder="Password (8+ characters)" value={password} onChange={(event) => setPassword(event.target.value)} /><Button className="h-12 w-full bg-accent text-accent-foreground hover:bg-accent/90" disabled={loading || !displayName || !email || password.length < 8} onClick={submit}>{loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating account...</> : "Create account"}</Button></CardContent></Card>
 }

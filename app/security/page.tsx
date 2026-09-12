@@ -59,14 +59,13 @@ export default function SecurityPage() {
               </h2>
               <div className="space-y-4">
                 <p className="text-muted-foreground leading-relaxed">
-                  We use Firebase Authentication, a secure and reliable authentication service provided by Google. Our
-                  authentication system includes:
+We use username and password authentication with secure HTTP-only sessions. Our authentication system includes:
                 </p>
                 <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
                   <li>Secure password hashing using bcrypt with salt</li>
                   <li>Email verification to confirm account ownership</li>
                   <li>Multi-factor authentication (MFA) support</li>
-                  <li>OAuth 2.0 integration for Google and Discord sign-in</li>
+                  <li>Secure credential-based sign-in</li>
                   <li>Session management with automatic token expiration</li>
                   <li>Account lockout after multiple failed login attempts</li>
                   <li>IP-based rate limiting to prevent brute force attacks</li>
@@ -239,7 +238,7 @@ export default function SecurityPage() {
               <h2 className="text-3xl font-bold text-foreground mb-4">11. Third-Party Security</h2>
               <p className="text-muted-foreground leading-relaxed">
                 We carefully vet all third-party services and ensure they meet our security standards. Our key partners
-                include Firebase (Google), Vercel, Resend, and various AI providers. All partners are required to
+                include Vercel, Resend, and various AI providers. All partners are required to
                 maintain appropriate security measures and undergo regular security assessments.
               </p>
             </section>
