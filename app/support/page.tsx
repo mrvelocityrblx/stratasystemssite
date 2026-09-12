@@ -43,14 +43,27 @@ export default function SupportPage() {
 
     setIsSubmitting(true)
     try {
-      const success = createSupportTicket({
+      const ticketDetails = {
         userId: user.uid,
         userEmail: user.email || "",
         userName: userAccount?.displayName || "User",
         subject: subject.trim(),
         message: message.trim(),
         priority,
+      }
+
+      const emailResponse = await fetch("/api/support/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(ticketDetails),
       })
+
+      if (!emailResponse.ok) {
+        const errorBody = await emailResponse.json().catch(() => null)
+        throw new Error(errorBody?.error || "Failed to send support ticket")
+      }
+
+      const success = createSupportTicket(ticketDetails)
 
       if (success) {
         setStatusMessage({ type: "success", text: "Support ticket submitted successfully!" })
